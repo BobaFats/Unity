@@ -32,7 +32,6 @@ public class PigEnemy : MonoBehaviour
     [SerializeField] private Tanks2D.VisualSlot visual;
     [SerializeField] private Tanks2D.EnemyHealthBar2D healthBar;
     [SerializeField] private GameObject damageTextPrefab;
-    [SerializeField] private GameObject goldTextPrefab;
 
     [Header("Hit Feedback")]
     [SerializeField] private Color hitFlashColor = Color.white;
@@ -45,7 +44,6 @@ public class PigEnemy : MonoBehaviour
     private float _nextAttackTime;
     private Tanks2D.Wall _targetWall;
     private bool isDying;
-    private int _goldValue;
     private bool _isBoss;
     private float _healthMultiplier = 1f;
     private Color _baseColor = Color.white;
@@ -115,9 +113,8 @@ public class PigEnemy : MonoBehaviour
         _targetWall = wall;
     }
 
-    public void Initialize(int goldReward, bool isBoss, float healthMultiplier = 1f)
+    public void Initialize(bool isBoss, float healthMultiplier = 1f)
     {
-        _goldValue = goldReward;
         _isBoss = isBoss;
         _healthMultiplier = Mathf.Max(0.1f, healthMultiplier);
     }
@@ -262,17 +259,11 @@ public class PigEnemy : MonoBehaviour
         _alive.Remove(this);
 
         // Сначала опыт (повышения уровня), потом спавнер (за босса — награда и лобби)
-        Wallet.AddGold(_goldValue);
         Tanks2D.ExperienceSystem.AddExperience(xpReward);
 
         if (Tanks2D.EnemySpawner2D.Instance != null)
         {
             Tanks2D.EnemySpawner2D.Instance.RegisterEnemyDeath(_isBoss);
-        }
-
-        if (_goldValue > 0)
-        {
-            SpawnFloatingText(goldTextPrefab, $"+{_goldValue}", new Color(1f, 0.84f, 0f), 0.3f);
         }
 
         if (healthBar != null) healthBar.gameObject.SetActive(false);

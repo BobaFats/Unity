@@ -26,6 +26,7 @@ namespace Tanks2D.EditorTools
         private const string ElementCatalogPath = ResourcesFolder + "/" + ElementCatalog.ResourcePath + ".asset";
         private const string PrefabFolder = "Assets/Prefab/Vertical";
         private const string SceneFolder = "Assets/Scenes/Vertical";
+        private const string BounceMaterialPath = PrefabFolder + "/BulletBounce.physicsMaterial2D";
 
         public const string MenuSceneName = "Menu";
         public const string BattleSceneName = "Battle";
@@ -133,6 +134,8 @@ namespace Tanks2D.EditorTools
                 CreatePlaceholderSprites();
                 CreateOrUpdateCatalog();
                 CreateOrUpdateElements();
+
+                EnsureLayer(BulletMovement2D.LayerName);
 
                 EditorUtility.DisplayProgressBar("Vertical Shooter", "Префабы...", 0.3f);
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -329,17 +332,62 @@ namespace Tanks2D.EditorTools
             var go = new GameObject("Bullet");
             go.AddComponent<VisualSlot>().Configure(VisualId.Bullet, 30, false);
 
+            go.layer = LayerMask.NameToLayer(BulletMovement2D.LayerName);
+
+            // Динамическое тело без гравитации: летит по прямой и упруго отскакивает от стен
             Rigidbody2D body = go.AddComponent<Rigidbody2D>();
-            body.bodyType = RigidbodyType2D.Kinematic;
+            body.bodyType = RigidbodyType2D.Dynamic;
+            body.gravityScale = 0f;
+            body.linearDamping = 0f;
+            body.angularDamping = 0f;
+            body.constraints = RigidbodyConstraints2D.FreezeRotation;
             body.interpolation = RigidbodyInterpolation2D.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
 
             CircleCollider2D collider = go.AddComponent<CircleCollider2D>();
-            collider.isTrigger = true;
+            collider.isTrigger = false;
             collider.radius = VisualCatalog.Resolve(VisualId.Bullet).size.x * 0.5f;
+            collider.sharedMaterial = GetBounceMaterial();
 
             go.AddComponent<BulletMovement2D>();
             return SavePrefab(go, "Bullet");
+        }
+
+        // Упругий материал без трения: угол падения = углу отражения, скорость не теряется
+        private static PhysicsMaterial2D GetBounceMaterial()
+        {
+            var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial2D>(BounceMaterialPath);
+            if (material == null)
+            {
+                material = new PhysicsMaterial2D("BulletBounce");
+                AssetDatabase.CreateAsset(material, BounceMaterialPath);
+            }
+
+            material.bounciness = 1f;
+            material.friction = 0f;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        // Добавляет пользовательский слой в Tags and Layers, если его ещё нет
+        private static void EnsureLayer(string layerName)
+        {
+            if (LayerMask.NameToLayer(layerName) >= 0) return;
+
+            var tagManager = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
+            SerializedProperty layers = tagManager.FindProperty("layers");
+
+            for (int i = 8; i < layers.arraySize; i++)
+            {
+                SerializedProperty layer = layers.GetArrayElementAtIndex(i);
+                if (!string.IsNullOrEmpty(layer.stringValue)) continue;
+
+                layer.stringValue = layerName;
+                tagManager.ApplyModifiedPropertiesWithoutUndo();
+                return;
+            }
+
+            Debug.LogError($"[Vertical Shooter] Нет свободного слоя для '{layerName}'");
         }
 
         private static GameObject CreateEnemyPrefab(string name, VisualId visualId, int maxHP, float speed, int attackDamage, int xpReward,
@@ -374,7 +422,6 @@ namespace Tanks2D.EditorTools
                 ("visual", visual),
                 ("healthBar", healthBar),
                 ("damageTextPrefab", prefabs.DamageText),
-                ("goldTextPrefab", null),
                 ("xpReward", xpReward),
                 ("knockbackResistance", knockbackResistance));
 
@@ -527,6 +574,8 @@ namespace Tanks2D.EditorTools
 
             PlayerController2D player = CreatePlayer(new Vector3(0f, bottom + 1.9f, 0f), prefabs.Bullet);
 
+            CreateSideBounds(fieldGo.transform);
+
             var spawnerGo = new GameObject("EnemySpawner");
             spawnerGo.transform.position = new Vector3(0f, -bottom + 1f, 0f);
             EnemySpawner2D spawner = spawnerGo.AddComponent<EnemySpawner2D>();
@@ -543,7 +592,6 @@ namespace Tanks2D.EditorTools
                 ("_doublingPeriod", 60f),
                 ("_maxAliveEnemies", 50),
                 ("_spawnDuringBoss", true),
-                ("bossGoldReward", 0),
                 ("_healthGrowthPerMission", 0.3f),
                 ("lobbySceneName", LobbySceneName),
                 ("delayBeforeLobby", 1.5f),
@@ -552,8 +600,8 @@ namespace Tanks2D.EditorTools
                 ("bossMusic", AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Music/Босс.mp3")));
 
             SetEnemyConfigs(spawner,
-                ("Свинья", prefabs.Pig, 70, 0),
-                ("Курица", prefabs.Chicken, 30, 0));
+                ("Свинья", prefabs.Pig, 70),
+                ("Курица", prefabs.Chicken, 30));
 
             // --- Интерфейс
             RectTransform area = CreateCanvas("HUD");
@@ -561,7 +609,9 @@ namespace Tanks2D.EditorTools
             BuildBottomBar(area, player);
             BuildPauseMenu(area);
             LevelUpPanel levelUpPanel = BuildLevelUp(area);
+            DialoguePanel dialogue = BuildDialogue(area);
             BuildGameOver(area, wall);
+            Wire(spawner, ("_dialoguePanel", dialogue));
 
             // --- Опыт и башни
             var towersGo = new GameObject("Towers");
@@ -578,6 +628,28 @@ namespace Tanks2D.EditorTools
                 ("hpGradient", CreateHpGradient()));
 
             EditorSceneManager.SaveScene(scene, BattleScenePath);
+        }
+
+        // Невидимые стены по бокам поля: от них физически отскакивают пули
+        private static void CreateSideBounds(Transform parent)
+        {
+            var bounds = new GameObject("Bounds").transform;
+            bounds.SetParent(parent, false);
+
+            const float thickness = 1f;
+            float height = FieldSize.y * 3f;
+            PhysicsMaterial2D material = GetBounceMaterial();
+
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var wall = new GameObject(side < 0f ? "LeftBound" : "RightBound");
+                wall.transform.SetParent(bounds, false);
+                wall.transform.localPosition = new Vector3(side * (FieldSize.x + thickness) * 0.5f, 0f, 0f);
+
+                BoxCollider2D collider = wall.AddComponent<BoxCollider2D>();
+                collider.size = new Vector2(thickness, height);
+                collider.sharedMaterial = material;
+            }
         }
 
         private static PlayerController2D CreatePlayer(Vector3 position, GameObject bulletPrefab)
@@ -611,7 +683,7 @@ namespace Tanks2D.EditorTools
             return controller;
         }
 
-        private static void SetEnemyConfigs(EnemySpawner2D spawner, params (string name, GameObject prefab, int chance, int gold)[] configs)
+        private static void SetEnemyConfigs(EnemySpawner2D spawner, params (string name, GameObject prefab, int chance)[] configs)
         {
             var so = new SerializedObject(spawner);
             SerializedProperty array = so.FindProperty("_enemiesConfigs");
@@ -623,7 +695,6 @@ namespace Tanks2D.EditorTools
                 element.FindPropertyRelative("enemyName").stringValue = configs[i].name;
                 element.FindPropertyRelative("enemyPrefab").objectReferenceValue = configs[i].prefab;
                 element.FindPropertyRelative("spawnChance").intValue = configs[i].chance;
-                element.FindPropertyRelative("goldReward").intValue = configs[i].gold;
             }
 
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -769,6 +840,66 @@ namespace Tanks2D.EditorTools
             Wire(pauseMenu, ("_panel", panel.gameObject), ("_pauseButton", pauseButton), ("_resumeButton", resume));
 
             panel.gameObject.SetActive(false);
+        }
+
+        private static DialoguePanel BuildDialogue(RectTransform area)
+        {
+            // Компонент на всегда активном объекте, панель — дочерняя и скрыта
+            RectTransform holder = CreateRect("Dialogue", area);
+            Stretch(holder);
+            DialoguePanel dialogue = holder.gameObject.AddComponent<DialoguePanel>();
+
+            RectTransform panel = CreateRect("Panel", holder);
+            Stretch(panel);
+
+            // Прозрачная кнопка на весь экран: тап/клик — следующая реплика
+            Image overlay = AddImage(panel, new Color(0f, 0f, 0f, 0.45f));
+            Button next = panel.gameObject.AddComponent<Button>();
+            next.targetGraphic = overlay;
+            next.transition = Selectable.Transition.None;
+
+            RectTransform box = CreateRect("Box", panel);
+            SetAnchors(box, new Vector2(0.03f, 0.1f), new Vector2(0.97f, 0.36f));
+            Image boxImage = AddImage(box, PanelColor);
+            boxImage.raycastTarget = false;
+
+            Image left = CreateIcon(box, "LeftPortrait", VisualId.Boss, new Vector2(230f, 230f), true);
+            SetAnchors(left.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 0f));
+            left.rectTransform.anchoredPosition = new Vector2(30f, -60f);
+            left.rectTransform.sizeDelta = new Vector2(230f, 230f);
+
+            Image right = CreateIcon(box, "RightPortrait", VisualId.Player, new Vector2(230f, 230f), true);
+            SetAnchors(right.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0f));
+            right.rectTransform.anchoredPosition = new Vector2(-30f, -60f);
+            right.rectTransform.sizeDelta = new Vector2(230f, 230f);
+
+            TextMeshProUGUI speaker = CreateText(box, "Speaker", "Босс", 56, TextAlignmentOptions.MidlineLeft);
+            SetAnchors(speaker.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
+            speaker.rectTransform.offsetMin = new Vector2(300f, -150f);
+            speaker.rectTransform.offsetMax = new Vector2(-300f, -60f);
+            speaker.color = new Color(1f, 0.82f, 0.35f);
+
+            TextMeshProUGUI line = CreateText(box, "Line", "...", 72, TextAlignmentOptions.Center);
+            SetAnchors(line.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f));
+            line.rectTransform.offsetMin = new Vector2(40f, 90f);
+            line.rectTransform.offsetMax = new Vector2(-40f, -160f);
+
+            TextMeshProUGUI hint = CreateText(box, "Hint", "Нажмите, чтобы продолжить", 30, TextAlignmentOptions.Center);
+            SetAnchors(hint.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f));
+            hint.rectTransform.offsetMin = new Vector2(0f, 20f);
+            hint.rectTransform.offsetMax = new Vector2(0f, 70f);
+            hint.color = new Color(1f, 1f, 1f, 0.5f);
+
+            Wire(dialogue,
+                ("_root", panel.gameObject),
+                ("_speakerText", speaker),
+                ("_lineText", line),
+                ("_leftPortrait", left.GetComponent<UIVisualSlot>()),
+                ("_rightPortrait", right.GetComponent<UIVisualSlot>()),
+                ("_nextButton", next));
+
+            panel.gameObject.SetActive(false);
+            return dialogue;
         }
 
         private static LevelUpPanel BuildLevelUp(RectTransform area)

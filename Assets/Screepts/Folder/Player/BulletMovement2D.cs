@@ -2,83 +2,72 @@ using UnityEngine;
 
 namespace Tanks2D
 {
-    // Пуля летит по своей оси Y. От боковых краёв поля отскакивает и после отскока
-    // доворачивает на ближайшего врага. Нужен Rigidbody2D (Kinematic) и Collider2D с isTrigger.
+    // Физическая пуля: Rigidbody2D (Dynamic, без гравитации) с упругим материалом.
+    // Летит строго по прямой, без самонаведения; от боковых стен поля (коллайдеры Bounds)
+    // отскакивает по законам физики — угол падения равен углу отражения.
+    // Врагов задевает через триггеры, поэтому от них не отскакивает, а наносит урон и исчезает.
+    [RequireComponent(typeof(Rigidbody2D))]
     public class BulletMovement2D : MonoBehaviour
     {
-        [SerializeField] private float _lifetime = 4f;
-        [Tooltip("Сколько раз пуля может отскочить от бортов")]
-        [SerializeField] private int _maxBounces = 3;
-        [Tooltip("После отскока лететь в ближайшего врага (иначе — зеркальное отражение)")]
-        [SerializeField] private bool _aimAtEnemyAfterBounce = true;
-        [Tooltip("Радиус пули для расчёта касания борта")]
-        [SerializeField] private float _radius = 0.11f;
+        public const string LayerName = "Bullet";
 
+        [SerializeField] private float _lifetime = 4f;
+        [Tooltip("Сколько раз пуля может отскочить от стен")]
+        [SerializeField] private int _maxBounces = 3;
+
+        private Rigidbody2D _body;
         private float _speed;
         private int _damage;
         private int _bounces;
         private bool _hasHit;
 
+        public int Bounces => _bounces;
+        public Vector2 Velocity => _body != null ? _body.linearVelocity : Vector2.zero;
+
+        // Пули не сталкиваются друг с другом
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ConfigureCollisions()
+        {
+            int layer = LayerMask.NameToLayer(LayerName);
+            if (layer >= 0) Physics2D.IgnoreLayerCollision(layer, layer, true);
+        }
+
+        private void Awake()
+        {
+            _body = GetComponent<Rigidbody2D>();
+        }
+
         public void Initialize(float speed, int damage)
         {
             _speed = speed;
             _damage = damage;
+            _body.linearVelocity = transform.up * speed;
             Destroy(gameObject, _lifetime);
+        }
+
+        private void FixedUpdate()
+        {
+            Vector2 velocity = _body.linearVelocity;
+            if (velocity.sqrMagnitude < 0.0001f) return;
+
+            // Упругий отскок без потери скорости; поворачиваем спрайт по направлению полёта
+            _body.linearVelocity = velocity.normalized * _speed;
+            _body.rotation = Mathf.Atan2(velocity.y, velocity.x) * Mathf.Rad2Deg - 90f;
         }
 
         private void Update()
         {
-            transform.Translate(Vector3.up * _speed * Time.deltaTime, Space.Self);
-
             PlayField field = PlayField.Instance;
             if (field == null) return;
 
-            Vector3 position = transform.position;
-            Vector2 direction = transform.up;
-
-            bool hitLeft = position.x < field.Left + _radius && direction.x < 0f;
-            bool hitRight = position.x > field.Right - _radius && direction.x > 0f;
-
-            if (hitLeft || hitRight)
-            {
-                Bounce(field, position, direction, hitLeft);
-                return;
-            }
-
-            if (position.y > field.Top + 1f || position.y < field.Bottom - 1f)
-            {
-                Destroy(gameObject);
-            }
+            float y = transform.position.y;
+            if (y > field.Top + 2f || y < field.Bottom - 2f) Destroy(gameObject);
         }
 
-        private void Bounce(PlayField field, Vector3 position, Vector2 direction, bool fromLeft)
+        private void OnCollisionEnter2D(Collision2D collision)
         {
             _bounces++;
-            if (_bounces > _maxBounces)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            position.x = fromLeft ? field.Left + _radius : field.Right - _radius;
-            transform.position = position;
-
-            direction.x = -direction.x;
-
-            if (_aimAtEnemyAfterBounce)
-            {
-                PigEnemy target = PigEnemy.FindNearest(position);
-                if (target != null) direction = ((Vector2)target.transform.position - (Vector2)position).normalized;
-            }
-
-            SetDirection(direction);
-        }
-
-        private void SetDirection(Vector2 direction)
-        {
-            if (direction.sqrMagnitude < 0.0001f) return;
-            float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-            transform.rotation = Quaternion.Euler(0f, 0f, angle - 90f);
+            if (_bounces > _maxBounces) Destroy(gameObject);
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -89,7 +78,7 @@ namespace Tanks2D
             if (enemy == null || enemy.IsDying) return;
 
             _hasHit = true;
-            ElementSystem.ResolveHit(enemy, _damage, transform.up);
+            ElementSystem.ResolveHit(enemy, _damage, _body.linearVelocity.normalized);
             Destroy(gameObject);
         }
     }

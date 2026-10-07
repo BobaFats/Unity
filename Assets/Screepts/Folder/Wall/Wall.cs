@@ -150,9 +150,8 @@ namespace Tanks2D
             GamePause.Clear();
             IsGameOver = false;
 
-            // Полный перезапуск: прокачка и золото сбрасываются
+            // Полный перезапуск: прогресс сбрасывается
             GameStats.ResetAll();
-            Wallet.ResetWallet();
 
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }

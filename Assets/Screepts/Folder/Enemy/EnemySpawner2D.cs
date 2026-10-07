@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Serialization;
@@ -13,7 +14,6 @@ namespace Tanks2D
             public string enemyName;
             public GameObject enemyPrefab;
             [Range(0, 100)] public int spawnChance = 50;
-            [Min(0)] public int goldReward = 10;
         }
 
         [Header("References (Ссылки)")]
@@ -40,12 +40,22 @@ namespace Tanks2D
         [SerializeField] private GameObject bossPrefab;
         [Tooltip("Сколько обычных врагов нужно убить, чтобы пришел Босс")]
         [SerializeField] private int killsNeededForBoss = 10;
-        [Tooltip("Сколько золота дадут за убийство Босса")]
-        [SerializeField] private int bossGoldReward = 100;
 
-        [Header("Difficulty by Mission")]
-        [Tooltip("Прибавка к HP всех врагов за каждую следующую миссию (0.3 = +30%)")]
+        [Header("Boss Intro Dialogue (Диалог при появлении босса)")]
+        [SerializeField] private DialoguePanel _dialoguePanel;
+        [SerializeField] private List<DialogueLine> _bossIntroDialogue = new List<DialogueLine>
+        {
+            new DialogueLine { speaker = "Босс", portrait = VisualId.Boss, text = "ААА, ООО" },
+            new DialogueLine { speaker = "Герой", portrait = VisualId.Player, text = "ЫЫЫЫ", rightSide = true }
+        };
+
+        [Header("Enemy Health Scaling (Рост здоровья врагов)")]
+        [Tooltip("Прибавка к HP за каждую следующую миссию (0.3 = +30%)")]
         [SerializeField] private float _healthGrowthPerMission = 0.3f;
+        [Tooltip("Прибавка к HP за каждую минуту боя (0.5 = +50% в минуту)")]
+        [SerializeField] private float _healthGrowthPerMinute = 0.5f;
+        [Tooltip("Прибавка к HP за каждый уровень героя (0.15 = +15% за уровень)")]
+        [SerializeField] private float _healthGrowthPerPlayerLevel = 0.15f;
 
         [Header("Transition Settings (Переход после победы)")]
         [FormerlySerializedAs("campSceneName")]
@@ -73,7 +83,11 @@ namespace Tanks2D
         public bool IsBossDefeated => _isBossDefeated;
         public float BattleTime => _battleTime;
         public int BossLevel => GameStats.Mission;
-        public float HealthMultiplier => 1f + _healthGrowthPerMission * Mathf.Max(0, GameStats.Mission - 1);
+        // Враги крепнут вместе с героем: по миссии, по времени боя и по уровню героя (множители перемножаются)
+        public float HealthMultiplier =>
+            (1f + _healthGrowthPerMission * Mathf.Max(0, GameStats.Mission - 1)) *
+            (1f + _healthGrowthPerMinute * _battleTime / 60f) *
+            (1f + _healthGrowthPerPlayerLevel * Mathf.Max(0, GameStats.Level - 1));
 
         // x1 в первую минуту, x2 во вторую, x4 в третью...
         public int SpawnMultiplier => 1 << Mathf.Clamp(Mathf.FloorToInt(_battleTime / Mathf.Max(1f, _doublingPeriod)), 0, Mathf.Clamp(_maxDoublings, 0, 20));
@@ -130,7 +144,7 @@ namespace Tanks2D
             EnemySpawnConfig selectedConfig = GetRandomEnemyConfig();
             if (selectedConfig == null || selectedConfig.enemyPrefab == null) return;
 
-            Spawn(selectedConfig.enemyPrefab, GetRandomSpawnX(), selectedConfig.goldReward, false);
+            Spawn(selectedConfig.enemyPrefab, GetRandomSpawnX(), false);
         }
 
         private void SpawnBoss()
@@ -146,13 +160,16 @@ namespace Tanks2D
             PlayMusic(bossMusic);
 
             float centerX = PlayField.Instance != null ? PlayField.Instance.Center.x : transform.position.x;
-            GameObject boss = Spawn(bossPrefab, centerX, bossGoldReward, true);
+            GameObject boss = Spawn(bossPrefab, centerX, true);
 
             BossAbilities abilities = boss.GetComponent<BossAbilities>();
             if (abilities != null) abilities.Setup(BossLevel);
+
+            // Реплики при появлении босса (игра на паузе, пока диалог открыт)
+            if (_dialoguePanel != null && _bossIntroDialogue.Count > 0) _dialoguePanel.Play(_bossIntroDialogue, null);
         }
 
-        private GameObject Spawn(GameObject prefab, float x, int goldReward, bool isBoss)
+        private GameObject Spawn(GameObject prefab, float x, bool isBoss)
         {
             var position = new Vector3(x, GetSpawnY(), 0f);
             GameObject enemyGo = Instantiate(prefab, position, Quaternion.identity);
@@ -160,7 +177,7 @@ namespace Tanks2D
             PigEnemy enemy = enemyGo.GetComponent<PigEnemy>();
             if (enemy != null)
             {
-                enemy.Initialize(goldReward, isBoss, HealthMultiplier);
+                enemy.Initialize(isBoss, HealthMultiplier);
                 enemy.SetTargetWall(_wall);
             }
 

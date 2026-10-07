@@ -9,7 +9,7 @@ namespace Tanks2D
     public class SceneLoadButton : MonoBehaviour
     {
         [SerializeField] private string _sceneName = "Menu";
-        [Tooltip("Сбросить прокачку и золото перед переходом")]
+        [Tooltip("Сбросить весь прогресс (новая игра) перед переходом")]
         [SerializeField] private bool _resetProgress;
 
         private void Start()
@@ -24,7 +24,6 @@ namespace Tanks2D
             if (_resetProgress)
             {
                 GameStats.ResetAll();
-                Wallet.ResetWallet();
             }
 
             SceneManager.LoadScene(_sceneName);

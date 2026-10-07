@@ -241,7 +241,6 @@ MonoBehaviour:
   visual: {fileID: 253141067186549727}
   healthBar: {fileID: 9097670946590849983}
   damageTextPrefab: {fileID: 7739126329345863156, guid: 2b73c03676c09bb4483dca2be67c5cdd, type: 3}
-  goldTextPrefab: {fileID: 0}
   hitFlashColor: {r: 1, g: 1, b: 1, a: 1}
   hitFlashDuration: 0.08
   deathFadeDuration: 0.35

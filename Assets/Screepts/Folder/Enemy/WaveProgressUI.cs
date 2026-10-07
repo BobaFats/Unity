@@ -23,7 +23,7 @@ namespace Tanks2D
 
             int minute = Mathf.FloorToInt(spawner.BattleTime / 60f);
             int seconds = Mathf.FloorToInt(spawner.BattleTime % 60f);
-            _text.text += $"\n<size=75%>{minute}:{seconds:00}  ·  враги x{spawner.SpawnMultiplier}</size>";
+            _text.text += $"\n<size=75%>{minute}:{seconds:00}  ·  враги x{spawner.SpawnMultiplier}  ·  HP x{spawner.HealthMultiplier:0.0}</size>";
         }
     }
 }

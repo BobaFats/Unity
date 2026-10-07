@@ -27,7 +27,6 @@ namespace Tanks2D
         private void StartNewGame()
         {
             GameStats.ResetAll();
-            Wallet.ResetWallet();
             SceneManager.LoadScene(gameplaySceneName);
         }
 

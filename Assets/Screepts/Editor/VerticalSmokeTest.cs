@@ -27,6 +27,8 @@ namespace Tanks2D.EditorTools
         private static int _maxAliveSeen;
         private static BulletMovement2D _probeBullet;
         private static float _probeStartDirectionX;
+        private static Vector2 _probeStartVelocity;
+        private static float _probeStartGameTime;
         private static PigEnemy _probeEnemy;
         private static float _probeEnemyY;
         private static PigEnemy _boss;
@@ -133,7 +135,7 @@ namespace Tanks2D.EditorTools
                     Check(PigEnemy.AliveCount > 0 || EnemySpawner2D.Instance.KillsCount > 0, $"Враги появляются (живых: {PigEnemy.AliveCount})");
                     Check(player != null && (player.CurrentAmmo < GameStats.MaxAmmo || player.IsReloading || EnemySpawner2D.Instance.KillsCount > 0),
                         $"Автоатака: герой стреляет без нажатий (патронов {player?.CurrentAmmo}/{GameStats.MaxAmmo})");
-                    Check(Object.FindAnyObjectByType<ShopController>() == null && GameObject.Find("OpenShopButton") == null, "Магазина нет");
+                    Check(GameObject.Find("OpenShopButton") == null, "Магазина нет");
                     NextStep();
                     break;
                 }
@@ -178,17 +180,27 @@ namespace Tanks2D.EditorTools
                         if (Vector2.Distance(b.transform.position, new Vector2(-3.5f, -3f)) < 0.5f) _probeBullet = b;
                     }
                     _probeStartDirectionX = _probeBullet != null ? _probeBullet.transform.up.x : 0f;
+                    _probeStartVelocity = _probeBullet != null ? _probeBullet.Velocity : Vector2.zero;
+                    _probeStartGameTime = Time.time;
                     // Пробная пуля не должна исчезнуть, попав во врага по пути к борту
                     if (_probeBullet != null) SetField(_probeBullet, "_hasHit", true);
                     NextStep();
                     break;
                 }
 
-                case 3: // отскок
-                    if (Elapsed < 0.5) return;
-                    Check(_probeBullet != null && _probeBullet.transform.up.x > 0f && _probeStartDirectionX < 0f, "Пуля отскочила от левого борта");
+                case 3: // физический отскок
+                {
+                    if (Time.time - _probeStartGameTime < 0.5f && Elapsed < 30) return;
+
+                    Vector2 after = _probeBullet != null ? _probeBullet.Velocity : Vector2.zero;
+                    Check(_probeBullet != null && _probeBullet.Bounces == 1 && _probeStartDirectionX < 0f && after.x > 0f,
+                        $"Пуля отскочила от левой стены (отскоков {_probeBullet?.Bounces}, скорость {_probeStartVelocity} -> {after})");
+                    Check(Mathf.Abs(Mathf.Abs(after.x) - Mathf.Abs(_probeStartVelocity.x)) < 0.05f && Mathf.Abs(after.y - _probeStartVelocity.y) < 0.05f,
+                        "Отражение по физике: угол падения = углу отражения, без самонаведения");
+                    Check(Mathf.Abs(after.magnitude - _probeStartVelocity.magnitude) < 0.05f, "Скорость после отскока не теряется");
                     NextStep();
                     break;
+                }
 
                 case 4: // стихии: каждая по отдельности
                 {
@@ -264,6 +276,22 @@ namespace Tanks2D.EditorTools
 
                     // Ставим босса прямо над стеной, чтобы не ждать его подхода
                     if (_boss != null) _boss.transform.position = new Vector3(0f, Wall.ActiveInstance.TopY + 1.25f, 0f);
+
+                    // Диалог при появлении босса
+                    var dialogue = Object.FindAnyObjectByType<DialoguePanel>();
+                    Check(dialogue != null && dialogue.IsOpen && GamePause.IsPaused, "При появлении босса открылся диалог, игра на паузе");
+                    var spoken = new List<string>();
+                    int guardDialogue = 0;
+                    while (dialogue != null && dialogue.IsOpen && guardDialogue++ < 20)
+                    {
+                        DialogueLine line = dialogue.CurrentLine;
+                        if (line != null && (spoken.Count == 0 || spoken[spoken.Count - 1] != line.speaker + ": " + line.text)) spoken.Add(line.speaker + ": " + line.text);
+                        dialogue.Next();
+                    }
+                    string conversation = string.Join(" / ", spoken);
+                    Check(conversation == "Босс: ААА, ООО / Герой: ЫЫЫЫ", $"Реплики: {conversation}");
+                    Check(dialogue != null && !dialogue.IsOpen && !GamePause.IsPaused, "Диалог закрылся, игра продолжается");
+
                     _bossSpawnGameTime = Time.time;
                     NextStep();
                     break;

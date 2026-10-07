@@ -3,17 +3,8 @@ using UnityEngine;
 
 namespace Tanks2D
 {
-    public enum UpgradeType
-    {
-        Damage,
-        FireRate,
-        ReloadTime,
-        MaxAmmo,
-        WallHP
-    }
-
     // Все прокачиваемые характеристики в одном месте.
-    // Живут между сценами (бой -> лагерь -> бой) и сбрасываются только при новой игре / рестарте.
+    // Живут между сценами (лобби -> бой -> лобби) и сбрасываются только при новой игре.
     public static class GameStats
     {
         public const int BaseBulletDamage = 10;
@@ -55,8 +46,6 @@ namespace Tanks2D
         // Уровни стихий пуль по id стихии (0 — не изучена)
         private static readonly Dictionary<string, int> _elementLevels = new Dictionary<string, int>();
 
-        private static readonly Dictionary<UpgradeType, int> _levels = new Dictionary<UpgradeType, int>();
-
         static GameStats()
         {
             ResetAll();
@@ -80,13 +69,7 @@ namespace Tanks2D
             Experience = 0;
             Mission = 1;
             BossesDefeated = 0;
-            _levels.Clear();
             _elementLevels.Clear();
-        }
-
-        public static int GetLevel(UpgradeType type)
-        {
-            return _levels.TryGetValue(type, out int level) ? level : 1;
         }
 
         public static int GetElementLevel(string elementId)
@@ -98,36 +81,6 @@ namespace Tanks2D
         {
             if (string.IsNullOrEmpty(elementId)) return;
             _elementLevels[elementId] = Mathf.Max(0, level);
-        }
-
-        public static void IncrementLevel(UpgradeType type)
-        {
-            _levels[type] = GetLevel(type) + 1;
-        }
-
-        public static float GetValue(UpgradeType type)
-        {
-            switch (type)
-            {
-                case UpgradeType.Damage: return BulletDamage;
-                case UpgradeType.FireRate: return FireDelay;
-                case UpgradeType.ReloadTime: return ReloadTime;
-                case UpgradeType.MaxAmmo: return MaxAmmo;
-                case UpgradeType.WallHP: return WallMaxHP;
-                default: return 0f;
-            }
-        }
-
-        public static void SetValue(UpgradeType type, float value)
-        {
-            switch (type)
-            {
-                case UpgradeType.Damage: BulletDamage = Mathf.RoundToInt(value); break;
-                case UpgradeType.FireRate: FireDelay = value; break;
-                case UpgradeType.ReloadTime: ReloadTime = value; break;
-                case UpgradeType.MaxAmmo: MaxAmmo = Mathf.RoundToInt(value); break;
-                case UpgradeType.WallHP: WallMaxHP = Mathf.RoundToInt(value); break;
-            }
         }
     }
 }
