@@ -31,6 +31,19 @@ namespace Tanks2D
             return sprite;
         }
 
+        // Спрайт — одна из заглушек (а не арт, назначенный вручную)
+        public static bool IsPlaceholder(Sprite sprite)
+        {
+            if (sprite == null) return false;
+            if (sprite.name.StartsWith("Placeholder_")) return true;
+
+            foreach (PlaceholderShape shape in System.Enum.GetValues(typeof(PlaceholderShape)))
+            {
+                if (sprite == Get(shape)) return true;
+            }
+            return false;
+        }
+
         // Сбросить кэш после (пере)импорта PNG-заглушек, чтобы брались спрайты-ассеты
         public static void ClearCache()
         {

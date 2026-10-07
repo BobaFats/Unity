@@ -3,27 +3,60 @@ using UnityEngine;
 
 namespace Tanks2D
 {
-    // "Слот" для внешнего вида игрового объекта. Логика (коллайдеры, скрипты) живёт на корне,
-    // а картинка — в дочернем объекте "Visual", который заполняется из VisualCatalog:
-    // назначен Sprite -> рисуется арт, нет -> цветная фигура-заглушка с подписью.
+    // Внешний вид игрового объекта. Логика (коллайдеры, скрипты) живёт на корне, картинка — в дочерних объектах.
+    //
+    // Что показывается (по приоритету):
+    //   1) «Своя модель» этого объекта (любой префаб: анимированный спрайт, 3D-модель)
+    //   2) «Свой спрайт» этого объекта
+    //   3) модель из VisualCatalog
+    //   4) спрайт из VisualCatalog
+    //   5) заглушка: цветная фигура с подписью
+    // Спрайт, перетащенный вручную в SpriteRenderer объекта "Visual", автоматически становится «Своим спрайтом».
+    //
+    // Текст подписи можно править прямо в объекте "Label" или в поле «Свой текст подписи».
     [DisallowMultipleComponent]
     public class VisualSlot : MonoBehaviour
     {
         private const string VisualChildName = "Visual";
+        private const string ModelChildName = "Model";
         private const string LabelChildName = "Label";
 
         [SerializeField] private VisualId _id;
         [SerializeField] private int _sortingOrder;
         [SerializeField] private bool _showLabel = true;
 
+        [Header("Своё оформление этого объекта (важнее каталога)")]
+        [Tooltip("Спрайт только для этого объекта")]
+        [SerializeField] private Sprite _customSprite;
+        [Tooltip("Модель только для этого объекта: любой префаб (анимированный спрайт, 3D-модель)")]
+        [SerializeField] private GameObject _customPrefab;
+        [Tooltip("Текст подписи вместо текста из каталога. Если задан — подпись видна и поверх арта")]
+        [SerializeField] private string _customLabel;
+        [Tooltip("Цвет-оттенок для своего арта (белый — без изменений)")]
+        [SerializeField] private Color _customColor = Color.white;
+
+        [Header("Настройка модели")]
+        [Tooltip("Вписывать модель в размер объекта из каталога")]
+        [SerializeField] private bool _fitModelToSize = true;
+        [SerializeField] private float _modelScale = 1f;
+        [SerializeField] private Vector3 _modelOffset;
+        [SerializeField] private Vector3 _modelRotation;
+
+        [SerializeField, HideInInspector] private GameObject _modelSource;
+        [SerializeField, HideInInspector] private string _lastWrittenLabel;
+        [SerializeField, HideInInspector] private Sprite _lastAppliedSprite;
+
+        private SpriteRenderer _bodyRenderer;
         private SpriteRenderer _renderer;
         private Animator _animator;
 
         public VisualId Id => _id;
+        // Спрайт, который сейчас виден (для подсветки попаданий). У 3D-модели может быть null.
         public SpriteRenderer Renderer => _renderer;
         public Vector2 Size { get; private set; } = Vector2.one;
+        public string CurrentSource { get; private set; } = "";
 
-        // Аниматор есть только если в каталоге назначен контроллер
+        // Аниматор есть только если назначен контроллер (в каталоге или внутри модели)
         public Animator Animator => _animator != null && _animator.runtimeAnimatorController != null ? _animator : null;
 
         private void Awake()
@@ -46,35 +79,81 @@ namespace Tanks2D
             Size = entry.size;
 
             Transform body = GetOrCreateChild(VisualChildName);
-            _renderer = body.GetComponent<SpriteRenderer>();
-            if (_renderer == null) _renderer = body.gameObject.AddComponent<SpriteRenderer>();
+            _bodyRenderer = body.GetComponent<SpriteRenderer>();
+            if (_bodyRenderer == null) _bodyRenderer = body.gameObject.AddComponent<SpriteRenderer>();
+            _bodyRenderer.sortingOrder = _sortingOrder;
 
-            _renderer.sprite = entry.HasArt ? entry.sprite : PlaceholderSprites.Get(entry.shape);
-            _renderer.color = entry.HasArt ? Color.white : entry.color;
-            _renderer.sortingOrder = _sortingOrder;
+            GameObject prefab = _customPrefab != null ? _customPrefab : (_customSprite == null ? entry.prefab : null);
+            bool hasArt;
 
-            FitToSize(body, entry);
+            if (prefab != null)
+            {
+                ShowModel(prefab, entry);
+                hasArt = true;
+                CurrentSource = _customPrefab != null ? "своя модель" : "модель из каталога";
+            }
+            else
+            {
+                RemoveModel();
+                hasArt = ShowSprite(body, entry);
+            }
+
             ApplyAnimator(body, entry);
-            ApplyLabel(entry);
+            ApplyLabel(entry, hasArt);
         }
 
-        private void FitToSize(Transform body, VisualEntry entry)
+        // ---------------------------------------------------------------- Спрайт
+
+        private bool ShowSprite(Transform body, VisualEntry entry)
+        {
+            _bodyRenderer.enabled = true;
+            _renderer = _bodyRenderer;
+
+            Sprite current = _bodyRenderer.sprite;
+            // Ручной спрайт — тот, что поставил не этот скрипт
+            bool manual = current != null && current != _lastAppliedSprite && !PlaceholderSprites.IsPlaceholder(current) && current != entry.sprite;
+
+            // Спрайт перетащили руками в SpriteRenderer — запоминаем как свой, чтобы его больше ничего не затирало
+            if (manual && _customSprite == null) _customSprite = current;
+
+            Sprite art;
+            if (_customSprite != null) { art = _customSprite; CurrentSource = "свой спрайт"; }
+            else if (entry.sprite != null) { art = entry.sprite; CurrentSource = "спрайт из каталога"; }
+            else { art = null; CurrentSource = "заглушка"; }
+
+            if (art != null)
+            {
+                _bodyRenderer.sprite = art;
+                _bodyRenderer.color = _customColor;
+            }
+            else
+            {
+                _bodyRenderer.sprite = PlaceholderSprites.Get(entry.shape);
+                _bodyRenderer.color = entry.color;
+            }
+
+            _lastAppliedSprite = _bodyRenderer.sprite;
+            FitSprite(body, entry.size, art != null);
+            return art != null;
+        }
+
+        private void FitSprite(Transform body, Vector2 size, bool keepAspect)
         {
             body.localPosition = Vector3.zero;
             body.localRotation = Quaternion.identity;
 
-            Vector2 spriteSize = _renderer.sprite != null ? (Vector2)_renderer.sprite.bounds.size : Vector2.one;
+            Vector2 spriteSize = _bodyRenderer.sprite != null ? (Vector2)_bodyRenderer.sprite.bounds.size : Vector2.one;
             if (spriteSize.x <= 0f || spriteSize.y <= 0f)
             {
                 body.localScale = Vector3.one;
                 return;
             }
 
-            float scaleX = entry.size.x / spriteSize.x;
-            float scaleY = entry.size.y / spriteSize.y;
+            float scaleX = size.x / spriteSize.x;
+            float scaleY = size.y / spriteSize.y;
 
             // Арт вписывается с сохранением пропорций, заглушка растягивается точно в размер
-            if (entry.HasArt)
+            if (keepAspect)
             {
                 float uniform = Mathf.Min(scaleX, scaleY);
                 scaleX = uniform;
@@ -84,11 +163,101 @@ namespace Tanks2D
             body.localScale = new Vector3(scaleX, scaleY, 1f);
         }
 
+        // ---------------------------------------------------------------- Модель
+
+        private void ShowModel(GameObject prefab, VisualEntry entry)
+        {
+            _bodyRenderer.enabled = false;
+
+            Transform model = transform.Find(ModelChildName);
+            if (model != null && _modelSource != prefab)
+            {
+                DestroySafe(model.gameObject);
+                model = null;
+            }
+
+            if (model == null)
+            {
+                GameObject instance = Instantiate(prefab, transform);
+                instance.name = ModelChildName;
+                model = instance.transform;
+                _modelSource = prefab;
+
+                // Модель рисуется поверх фона и в порядке слоя этого объекта
+                foreach (Renderer r in instance.GetComponentsInChildren<Renderer>(true)) r.sortingOrder += _sortingOrder;
+            }
+
+            FitModel(model, entry.size);
+
+            _renderer = model.GetComponentInChildren<SpriteRenderer>(true);
+            if (_renderer != null && _customColor != Color.white) _renderer.color = _customColor;
+        }
+
+        private void FitModel(Transform model, Vector2 size)
+        {
+            model.localRotation = Quaternion.Euler(_modelRotation);
+            model.localScale = Vector3.one;
+            model.localPosition = Vector3.zero;
+
+            float scale = _modelScale;
+            Vector3 centerOffset = Vector3.zero;
+
+            if (_fitModelToSize && TryGetLocalBounds(model, out Bounds bounds) && bounds.size.x > 0.0001f && bounds.size.y > 0.0001f)
+            {
+                scale *= Mathf.Min(size.x / bounds.size.x, size.y / bounds.size.y);
+                centerOffset = -bounds.center * scale;
+            }
+
+            model.localScale = Vector3.one * scale;
+            model.localPosition = centerOffset + _modelOffset;
+        }
+
+        // Габариты модели в локальных координатах этого объекта (при масштабе модели 1)
+        private bool TryGetLocalBounds(Transform model, out Bounds bounds)
+        {
+            bounds = default;
+            bool found = false;
+
+            foreach (Renderer r in model.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r is ParticleSystemRenderer) continue;
+
+                Bounds world = r.bounds;
+                Vector3 min = transform.InverseTransformPoint(world.min);
+                Vector3 max = transform.InverseTransformPoint(world.max);
+                var local = new Bounds((min + max) * 0.5f, new Vector3(Mathf.Abs(max.x - min.x), Mathf.Abs(max.y - min.y), Mathf.Abs(max.z - min.z)));
+
+                if (!found) { bounds = local; found = true; }
+                else bounds.Encapsulate(local);
+            }
+
+            return found;
+        }
+
+        private void RemoveModel()
+        {
+            Transform model = transform.Find(ModelChildName);
+            if (model != null) DestroySafe(model.gameObject);
+            _modelSource = null;
+        }
+
+        // ---------------------------------------------------------------- Аниматор и подпись
+
         private void ApplyAnimator(Transform body, VisualEntry entry)
         {
+            Transform model = transform.Find(ModelChildName);
+            Animator modelAnimator = model != null ? model.GetComponentInChildren<Animator>(true) : null;
+
+            if (modelAnimator != null)
+            {
+                _animator = modelAnimator;
+                if (entry.animator != null && modelAnimator.runtimeAnimatorController == null) modelAnimator.runtimeAnimatorController = entry.animator;
+                return;
+            }
+
             _animator = body.GetComponent<Animator>();
 
-            if (entry.animator != null)
+            if (entry.animator != null && model == null)
             {
                 if (_animator == null) _animator = body.gameObject.AddComponent<Animator>();
                 _animator.runtimeAnimatorController = entry.animator;
@@ -99,10 +268,19 @@ namespace Tanks2D
             }
         }
 
-        private void ApplyLabel(VisualEntry entry)
+        private void ApplyLabel(VisualEntry entry, bool hasArt)
         {
-            bool showLabel = _showLabel && !entry.HasArt && !string.IsNullOrEmpty(entry.label);
             Transform labelTransform = transform.Find(LabelChildName);
+            TextMeshPro existing = labelTransform != null ? labelTransform.GetComponent<TextMeshPro>() : null;
+
+            // Текст подписи поправили руками в объекте Label — запоминаем как свой
+            if (existing != null && !string.IsNullOrEmpty(_lastWrittenLabel) && existing.text != _lastWrittenLabel)
+            {
+                _customLabel = existing.text;
+            }
+
+            string text = !string.IsNullOrEmpty(_customLabel) ? _customLabel : entry.label;
+            bool showLabel = _showLabel && !string.IsNullOrEmpty(text) && (!hasArt || !string.IsNullOrEmpty(_customLabel));
 
             if (!showLabel)
             {
@@ -119,7 +297,7 @@ namespace Tanks2D
             TextMeshPro label = labelTransform.GetComponent<TextMeshPro>();
             if (label == null) label = labelTransform.gameObject.AddComponent<TextMeshPro>();
 
-            label.text = entry.label;
+            label.text = text;
             label.alignment = TextAlignmentOptions.Center;
             label.textWrappingMode = TextWrappingModes.NoWrap;
             label.enableAutoSizing = true;
@@ -129,7 +307,11 @@ namespace Tanks2D
             label.color = new Color(0.08f, 0.08f, 0.08f, 1f);
             label.rectTransform.sizeDelta = entry.size * 0.85f;
             label.sortingOrder = _sortingOrder + 1;
+
+            _lastWrittenLabel = text;
         }
+
+        // ---------------------------------------------------------------- Helpers
 
         private Transform GetOrCreateChild(string childName)
         {
@@ -140,5 +322,25 @@ namespace Tanks2D
             go.transform.SetParent(transform, false);
             return go.transform;
         }
+
+        private static void DestroySafe(GameObject go)
+        {
+            if (Application.isPlaying) Destroy(go);
+            else DestroyImmediate(go);
+        }
+
+#if UNITY_EDITOR
+        // Изменения в инспекторе видны сразу, без запуска игры
+        private void OnValidate()
+        {
+            if (Application.isPlaying) return;
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null || Application.isPlaying) return;
+                if (UnityEditor.PrefabUtility.IsPartOfPrefabAsset(this)) return;
+                Apply();
+            };
+        }
+#endif
     }
 }

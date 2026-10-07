@@ -51,6 +51,9 @@ namespace Tanks2D
         [Tooltip("Финальный арт. Пока пусто — рисуется заглушка (фигура + цвет + подпись).")]
         public Sprite sprite;
 
+        [Tooltip("Модель: любой префаб (анимированный спрайт, 3D-модель и т.п.). Важнее спрайта. Вписывается в размер size.")]
+        public GameObject prefab;
+
         [Tooltip("Необязательно: аниматор для финального арта (триггеры Attack / Die у врагов).")]
         public RuntimeAnimatorController animator;
 
@@ -62,7 +65,7 @@ namespace Tanks2D
         [Tooltip("Размер объекта в мировых единицах (для UI — относительный, не используется). Арт вписывается в этот размер с сохранением пропорций.")]
         public Vector2 size = Vector2.one;
 
-        public bool HasArt => sprite != null;
+        public bool HasArt => sprite != null || prefab != null;
 
         public static VisualEntry Fallback(VisualId id)
         {

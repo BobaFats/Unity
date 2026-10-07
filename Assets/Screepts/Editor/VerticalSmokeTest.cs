@@ -142,6 +142,8 @@ namespace Tanks2D.EditorTools
 
                 case 1: // пауза
                 {
+                    CheckVisualOverrides();
+
                     var pause = Object.FindAnyObjectByType<PauseMenu>();
                     Check(pause != null, "Есть меню паузы");
                     if (pause != null)
@@ -342,6 +344,63 @@ namespace Tanks2D.EditorTools
                     Finish();
                     break;
             }
+        }
+
+        // ---------------------------------------------------------------- Замена оформления
+
+        private static void CheckVisualOverrides()
+        {
+            var texture = new Texture2D(32, 64);
+            Sprite art = Sprite.Create(texture, new Rect(0, 0, 32, 64), new Vector2(0.5f, 0.5f), 32);
+            art.name = "TestArt";
+
+            // Свой спрайт
+            var go = new GameObject("TestSlot");
+            VisualSlot slot = go.AddComponent<VisualSlot>();
+            slot.Configure(VisualId.EnemyPig, 10);
+            SetField(slot, "_customSprite", art);
+            slot.Apply();
+            Transform label = go.transform.Find("Label");
+            Check(slot.Renderer.sprite == art && slot.Renderer.color == Color.white && (label == null || !label.gameObject.activeSelf),
+                $"Свой спрайт виден, подпись-заглушка скрыта ({slot.CurrentSource})");
+            Object.Destroy(go);
+
+            // Спрайт, перетащенный вручную в Visual, не затирается
+            go = new GameObject("TestSlotManual");
+            slot = go.AddComponent<VisualSlot>();
+            slot.Configure(VisualId.EnemyPig, 10);
+            go.transform.Find("Visual").GetComponent<SpriteRenderer>().sprite = art;
+            slot.Apply();
+            slot.Apply();
+            Check(slot.Renderer.sprite == art, "Спрайт, заданный вручную, сохраняется после Apply");
+            Object.Destroy(go);
+
+            // Своя модель (префаб) + свой текст подписи
+            var modelTemplate = new GameObject("TestModel");
+            modelTemplate.AddComponent<SpriteRenderer>().sprite = art;
+            go = new GameObject("TestSlotModel");
+            slot = go.AddComponent<VisualSlot>();
+            slot.Configure(VisualId.EnemyPig, 10);
+            SetField(slot, "_customPrefab", modelTemplate);
+            SetField(slot, "_customLabel", "МОЙ ТЕКСТ");
+            slot.Apply();
+            Transform model = go.transform.Find("Model");
+            var body = go.transform.Find("Visual").GetComponent<SpriteRenderer>();
+            Bounds bounds = model != null ? model.GetComponentInChildren<SpriteRenderer>().bounds : default;
+            var text = go.transform.Find("Label")?.GetComponent<TMPro.TextMeshPro>();
+            Check(model != null && !body.enabled && bounds.size.y <= slot.Size.y + 0.01f && bounds.size.y > slot.Size.y * 0.9f,
+                $"Своя модель подставлена и вписана в размер ({bounds.size.x:0.00} x {bounds.size.y:0.00}, размер слота {slot.Size.y:0.00})");
+            Check(text != null && text.gameObject.activeSelf && text.text == "МОЙ ТЕКСТ", "Свой текст подписи виден поверх модели");
+            Object.Destroy(go);
+            Object.Destroy(modelTemplate);
+
+            // UI-иконка переключается между id и не залипает на прошлой картинке
+            var iconGo = new GameObject("TestIcon", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            UIVisualSlot icon = iconGo.AddComponent<UIVisualSlot>();
+            icon.Configure(VisualId.IconDamage);
+            icon.Configure(VisualId.IconTower);
+            Check(iconGo.GetComponent<UnityEngine.UI.Image>().color == VisualCatalog.Resolve(VisualId.IconTower).color, "Иконка сменилась при смене id");
+            Object.Destroy(iconGo);
         }
 
         // ---------------------------------------------------------------- Helpers
