@@ -139,3 +139,38 @@ MonoBehaviour:
     color: {r: 0.55, g: 0.88, b: 1, a: 1}
     label: <>
     size: {x: 1, y: 1}
+  - id: 18
+    sprite: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 0.45, g: 0.7, b: 1, a: 0.45}
+    label: 
+    size: {x: 3.2, y: 3.2}
+  - id: 19
+    sprite: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 2
+    color: {r: 1, g: 0.5, b: 0.15, a: 1}
+    label: "\u041E\u0413\u041D"
+    size: {x: 1, y: 1}
+  - id: 20
+    sprite: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 3
+    color: {r: 0.5, g: 0.85, b: 1, a: 1}
+    label: "\u0425\u041E\u041B"
+    size: {x: 1, y: 1}
+  - id: 21
+    sprite: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 0.75, g: 1, b: 0.75, a: 1}
+    label: "\u0412\u0415\u0422"
+    size: {x: 1, y: 1}
+  - id: 22
+    sprite: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 0
+    color: {r: 0.85, g: 0.65, b: 0.35, a: 1}
+    label: "\u0417\u0415\u041C"
+    size: {x: 1, y: 1}

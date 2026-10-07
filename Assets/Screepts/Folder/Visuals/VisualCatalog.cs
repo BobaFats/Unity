@@ -27,7 +27,12 @@ namespace Tanks2D
         Tower,
         IconTower,
         IconMultiShot,
-        IconSpread
+        IconSpread,
+        BossShield,
+        ElementFire,
+        ElementIce,
+        ElementWind,
+        ElementEarth
     }
 
     public enum PlaceholderShape

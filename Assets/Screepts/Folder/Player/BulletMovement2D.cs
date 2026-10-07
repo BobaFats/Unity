@@ -89,7 +89,7 @@ namespace Tanks2D
             if (enemy == null || enemy.IsDying) return;
 
             _hasHit = true;
-            enemy.ApplyDamage(_damage);
+            ElementSystem.ResolveHit(enemy, _damage, transform.up);
             Destroy(gameObject);
         }
     }

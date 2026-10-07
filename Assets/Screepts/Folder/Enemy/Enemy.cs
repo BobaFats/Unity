@@ -1,8 +1,10 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 // Враг идёт сверху вниз к стене, останавливается у её верхнего края и бьёт её.
+// Поддерживает эффекты стихий: горение, замедление, отбрасывание.
 public class PigEnemy : MonoBehaviour
 {
     [Header("Health Settings")]
@@ -11,6 +13,10 @@ public class PigEnemy : MonoBehaviour
     [Header("Movement Settings")]
     [Tooltip("Скорость движения вниз, единиц в секунду")]
     [SerializeField] private float speed = 2f;
+    [Tooltip("Сопротивление отбрасыванию: 0 — полное, 1 — неподвижен")]
+    [SerializeField, Range(0f, 1f)] private float knockbackResistance = 0f;
+    [Tooltip("Скорость, с которой враг отлетает при отбрасывании")]
+    [SerializeField] private float knockbackSpeed = 8f;
 
     [Header("Attack Settings (Настройки атаки стены)")]
     [SerializeField] private int attackDamage = 10;
@@ -32,6 +38,8 @@ public class PigEnemy : MonoBehaviour
     [SerializeField] private Color hitFlashColor = Color.white;
     [SerializeField] private float hitFlashDuration = 0.08f;
     [SerializeField] private float deathFadeDuration = 0.35f;
+    [SerializeField] private Color slowTint = new Color(0.55f, 0.85f, 1f);
+    [SerializeField] private Color burnTint = new Color(1f, 0.55f, 0.2f);
 
     private int currentHP;
     private float _nextAttackTime;
@@ -39,16 +47,40 @@ public class PigEnemy : MonoBehaviour
     private bool isDying;
     private int _goldValue;
     private bool _isBoss;
+    private float _healthMultiplier = 1f;
     private Color _baseColor = Color.white;
-    private Coroutine _flashRoutine;
+    private float _flashUntil;
+
+    // Эффекты стихий
+    private float _slowFactor;
+    private float _slowUntil;
+    private float _burnDps;
+    private float _burnUntil;
+    private float _burnAccumulated;
+    private Color _burnTextColor = new Color(1f, 0.55f, 0.2f);
+    private float _knockbackRemaining;
 
     // Все живые враги на сцене (для прицеливания башен, отскоков пуль и лимита спавна)
     private static readonly List<PigEnemy> _alive = new List<PigEnemy>();
     public static IReadOnlyList<PigEnemy> Alive => _alive;
     public static int AliveCount => _alive.Count;
 
+    // Для способностей босса
+    public event Action<PigEnemy> WallAttacked;
+    public float DamageTakenMultiplier { get; set; } = 1f;
+    public float AttackDamageMultiplier { get; set; } = 1f;
+    public bool MovementLocked { get; set; }
+
     public bool IsDying => isDying;
     public bool IsBoss => _isBoss;
+    public int CurrentHP => currentHP;
+    public int MaxHP => maxHP;
+    public bool IsSlowed => Time.time < _slowUntil;
+    public bool IsBurning => Time.time < _burnUntil;
+    public float CurrentSpeed => speed * (IsSlowed ? 1f - _slowFactor : 1f);
+
+    private float HalfHeight => visual != null ? visual.Size.y * 0.5f : 0.5f;
+    private Animator CurrentAnimator => visual != null ? visual.Animator : null;
 
     public static PigEnemy FindNearest(Vector2 position)
     {
@@ -78,22 +110,21 @@ public class PigEnemy : MonoBehaviour
         _alive.Remove(this);
     }
 
-    private float HalfHeight => visual != null ? visual.Size.y * 0.5f : 0.5f;
-    private Animator CurrentAnimator => visual != null ? visual.Animator : null;
-
     public void SetTargetWall(Tanks2D.Wall wall)
     {
         _targetWall = wall;
     }
 
-    public void Initialize(int goldReward, bool isBoss)
+    public void Initialize(int goldReward, bool isBoss, float healthMultiplier = 1f)
     {
         _goldValue = goldReward;
         _isBoss = isBoss;
+        _healthMultiplier = Mathf.Max(0.1f, healthMultiplier);
     }
 
     private void Start()
     {
+        maxHP = Mathf.Max(1, Mathf.RoundToInt(maxHP * _healthMultiplier));
         currentHP = maxHP;
         if (visual != null && visual.Renderer != null) _baseColor = visual.Renderer.color;
         if (healthBar != null) healthBar.SetNormalized(1f);
@@ -102,6 +133,21 @@ public class PigEnemy : MonoBehaviour
     private void Update()
     {
         if (isDying || Tanks2D.GamePause.IsPaused || Tanks2D.Wall.IsGameOver) return;
+
+        TickBurn();
+        if (isDying) return;
+
+        UpdateTint();
+
+        if (_knockbackRemaining > 0f)
+        {
+            float step = Mathf.Min(_knockbackRemaining, knockbackSpeed * Time.deltaTime);
+            transform.position += Vector3.up * step;
+            _knockbackRemaining -= step;
+            return;
+        }
+
+        if (MovementLocked) return;
 
         if (_targetWall == null)
         {
@@ -120,31 +166,94 @@ public class PigEnemy : MonoBehaviour
             Animator animator = CurrentAnimator;
             if (animator != null) animator.SetTrigger("Attack");
 
-            _targetWall.TakeDamage(attackDamage);
+            _targetWall.TakeDamage(Mathf.RoundToInt(attackDamage * AttackDamageMultiplier));
             _nextAttackTime = Time.time + attackRate;
+            WallAttacked?.Invoke(this);
         }
     }
 
     private void MoveDown(float stopY)
     {
         Vector3 position = transform.position;
-        position.y = Mathf.Max(stopY, position.y - speed * Time.deltaTime);
+        position.y = Mathf.Max(stopY, position.y - CurrentSpeed * Time.deltaTime);
         transform.position = position;
     }
 
-    public void ApplyDamage(int damage)
+    // ---------------------------------------------------------------- Урон
+
+    public void ApplyDamage(int damage, Color? textColor = null, bool isCrit = false)
     {
         if (isDying) return;
 
+        bool shielded = DamageTakenMultiplier < 1f;
+        damage = Mathf.Max(0, Mathf.RoundToInt(damage * DamageTakenMultiplier));
         currentHP -= damage;
 
         if (healthBar != null) healthBar.SetNormalized((float)currentHP / maxHP);
 
-        SpawnFloatingText(damageTextPrefab, damage.ToString(), null, 0f);
-        Flash();
+        string text = isCrit ? $"{damage}!" : damage.ToString();
+        Color? color = shielded ? new Color(0.6f, 0.75f, 1f) : textColor;
+        SpawnFloatingText(damageTextPrefab, text, color, 0f);
+        _flashUntil = Time.time + hitFlashDuration;
 
         if (currentHP <= 0) Die();
     }
+
+    // ---------------------------------------------------------------- Эффекты стихий
+
+    public void ApplyBurn(float damagePerSecond, float duration, Color textColor)
+    {
+        if (isDying) return;
+
+        // Новое горение не слабее текущего, длительность обновляется
+        _burnDps = IsBurning ? Mathf.Max(_burnDps, damagePerSecond) : damagePerSecond;
+        _burnUntil = Time.time + duration;
+        _burnTextColor = textColor;
+    }
+
+    public void ApplySlow(float factor, float duration)
+    {
+        if (isDying) return;
+
+        _slowFactor = IsSlowed ? Mathf.Max(_slowFactor, factor) : factor;
+        _slowUntil = Time.time + duration;
+    }
+
+    public void Knockback(float distance)
+    {
+        if (isDying) return;
+        _knockbackRemaining += distance * (1f - knockbackResistance);
+    }
+
+    private void TickBurn()
+    {
+        if (!IsBurning)
+        {
+            _burnAccumulated = 0f;
+            return;
+        }
+
+        _burnAccumulated += _burnDps * Time.deltaTime;
+        if (_burnAccumulated < 1f) return;
+
+        int damage = Mathf.FloorToInt(_burnAccumulated);
+        _burnAccumulated -= damage;
+        ApplyDamage(damage, _burnTextColor);
+    }
+
+    private void UpdateTint()
+    {
+        if (visual == null || visual.Renderer == null) return;
+
+        Color color = _baseColor;
+        if (IsSlowed) color = Color.Lerp(color, slowTint, 0.6f);
+        if (IsBurning) color = Color.Lerp(color, burnTint, 0.5f);
+        if (Time.time < _flashUntil) color = hitFlashColor;
+
+        visual.Renderer.color = color;
+    }
+
+    // ---------------------------------------------------------------- Смерть
 
     private void Die()
     {
@@ -152,13 +261,14 @@ public class PigEnemy : MonoBehaviour
         isDying = true;
         _alive.Remove(this);
 
+        // Сначала опыт (повышения уровня), потом спавнер (за босса — награда и лобби)
+        Wallet.AddGold(_goldValue);
+        Tanks2D.ExperienceSystem.AddExperience(xpReward);
+
         if (Tanks2D.EnemySpawner2D.Instance != null)
         {
             Tanks2D.EnemySpawner2D.Instance.RegisterEnemyDeath(_isBoss);
         }
-
-        Wallet.AddGold(_goldValue);
-        Tanks2D.ExperienceSystem.AddExperience(xpReward);
 
         if (_goldValue > 0)
         {
@@ -184,21 +294,6 @@ public class PigEnemy : MonoBehaviour
 
         DamageText floatingText = textGo.GetComponent<DamageText>();
         if (floatingText != null) floatingText.Setup(text, color);
-    }
-
-    private void Flash()
-    {
-        if (visual == null || visual.Renderer == null || isDying) return;
-        if (_flashRoutine != null) StopCoroutine(_flashRoutine);
-        _flashRoutine = StartCoroutine(FlashRoutine());
-    }
-
-    private IEnumerator FlashRoutine()
-    {
-        visual.Renderer.color = hitFlashColor;
-        yield return new WaitForSeconds(hitFlashDuration);
-        if (!isDying) visual.Renderer.color = _baseColor;
-        _flashRoutine = null;
     }
 
     private IEnumerator DeathRoutine()

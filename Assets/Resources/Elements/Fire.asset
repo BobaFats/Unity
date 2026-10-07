@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f1224c8eee37d43449cbf95957ead618, type: 3}
+  m_Name: Fire
+  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.FireElement
+  _id: fire
+  _displayName: "\u041E\u0433\u043E\u043D\u044C"
+  _icon: 19
+  _color: {r: 1, g: 0.5, b: 0.15, a: 1}
+  _maxLevel: 5
+  _baseChance: 0.2
+  _chancePerLevel: 0.1
+  _maxChance: 0.8
+  _order: 10
+  _damagePerSecond: 0.3
+  _damagePerSecondPerLevel: 0.1
+  _duration: 3

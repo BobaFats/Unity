@@ -12,15 +12,15 @@ namespace Tanks2D
         [SerializeField] private Button settingsButton;
 
         [Header("Scene Settings")]
-        [Tooltip("Имя боевой сцены, которая загрузится при нажатии Новая Игра")]
-        [SerializeField] private string gameplaySceneName = "Battle";
+        [Tooltip("Сцена, куда ведут «Новая игра» и «Продолжить» (лобби)")]
+        [SerializeField] private string gameplaySceneName = "Lobby";
 
         private void Start()
         {
             GamePause.Clear();
 
             if (newGameButton != null) newGameButton.onClick.AddListener(StartNewGame);
-            if (loadGameButton != null) loadGameButton.onClick.AddListener(LoadSavedGame);
+            if (loadGameButton != null) loadGameButton.onClick.AddListener(ContinueGame);
             if (settingsButton != null) settingsButton.onClick.AddListener(OpenSettings);
         }
 
@@ -31,9 +31,10 @@ namespace Tanks2D
             SceneManager.LoadScene(gameplaySceneName);
         }
 
-        private void LoadSavedGame()
+        // Продолжить текущий забег (прогресс хранится, пока игра запущена; сохранение на диск — позже)
+        private void ContinueGame()
         {
-            Debug.Log("[Menu] Кнопка 'Загрузить игру' нажата! (Систему сохранений мы прикрутим чуть позже)");
+            SceneManager.LoadScene(gameplaySceneName);
         }
 
         private void OpenSettings()

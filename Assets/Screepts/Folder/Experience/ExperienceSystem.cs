@@ -1,36 +1,57 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Tanks2D
 {
-    public enum LevelUpOption
+    // Один вариант награды в окне выбора
+    public class UpgradeChoice
     {
-        Tower,
-        Damage,
-        MultiShot,
-        Spread
+        public string Id;
+        public string Title;
+        public string Description;
+        public VisualId Icon;
+        public Action Apply;
     }
 
-    // Опыт за убийства -> новый уровень -> игра на паузе, игрок выбирает одну награду:
-    // построить башню-помощника или улучшить оружие (урон / количество пуль / разброс).
-    // Опыт, уровень и выбранные улучшения хранятся в GameStats и переживают переход между сценами.
+    // Опыт за убийства -> новый уровень -> пауза и выбор награды:
+    // башня-помощник, урон, количество пуль, разброс, а после первого босса — стихии пуль.
+    // Победа над боссом даёт отдельную награду — выбор стихии.
+    // Прогресс хранится в GameStats и переживает переход между сценами.
     public class ExperienceSystem : MonoBehaviour
     {
+        private enum OfferKind { LevelUp, BossReward }
+
+        private struct Offer
+        {
+            public OfferKind Kind;
+            public int Level;
+            public Action OnDone;
+        }
+
         [Header("Кривая опыта")]
         [Tooltip("Сколько опыта нужно для 2-го уровня")]
         [SerializeField] private int _baseXpToLevel = 5;
         [Tooltip("Во сколько раз растёт требование с каждым уровнем")]
         [SerializeField] private float _xpGrowth = 1.35f;
 
+        [Header("Выбор награды")]
+        [Tooltip("Сколько случайных вариантов показывать при новом уровне")]
+        [SerializeField] private int _choicesPerLevel = 4;
+
         [Header("References")]
         [SerializeField] private LevelUpPanel _panel;
         [SerializeField] private TowerManager _towers;
 
-        private int _pendingLevelUps;
+        private readonly Queue<Offer> _offers = new Queue<Offer>();
+        private bool _showing;
 
         public static ExperienceSystem Instance { get; private set; }
 
         public int XpToNextLevel => XpRequiredFor(GameStats.Level);
         public float Progress => Mathf.Clamp01((float)GameStats.Experience / Mathf.Max(1, XpToNextLevel));
+        public bool IsChoosing => _showing;
+        public bool IsShowingBossReward => _showing && _offers.Count > 0 && _offers.Peek().Kind == OfferKind.BossReward;
 
         // OnEnable, а не Awake: переживает перезагрузку скриптов прямо в Play Mode
         private void OnEnable()
@@ -63,29 +84,42 @@ namespace Tanks2D
             {
                 GameStats.Experience -= XpToNextLevel;
                 GameStats.Level++;
-                _pendingLevelUps++;
+                _offers.Enqueue(new Offer { Kind = OfferKind.LevelUp, Level = GameStats.Level });
             }
 
-            if (_pendingLevelUps > 0 && _panel != null && !_panel.IsOpen && !Wall.IsGameOver)
-            {
-                ShowChoice();
-            }
+            ShowNext();
         }
 
-        private void ShowChoice()
+        // Награда за босса: выбор стихии. onDone вызывается после выбора (например, переход в лобби).
+        public void OfferBossReward(Action onDone)
         {
-            GamePause.Set(this, true);
-            _panel.Show(GameStats.Level - _pendingLevelUps + 1, IsAvailable, Describe, OnOptionChosen);
+            _offers.Enqueue(new Offer { Kind = OfferKind.BossReward, OnDone = onDone });
+            ShowNext();
         }
 
-        private void OnOptionChosen(LevelUpOption option)
+        private void ShowNext()
         {
-            Apply(option);
-            _pendingLevelUps = Mathf.Max(0, _pendingLevelUps - 1);
+            if (_showing || _panel == null || Wall.IsGameOver) return;
 
-            if (_pendingLevelUps > 0)
+            while (_offers.Count > 0)
             {
-                ShowChoice();
+                Offer offer = _offers.Peek();
+                List<UpgradeChoice> choices = offer.Kind == OfferKind.BossReward ? BuildBossRewardChoices() : BuildLevelUpChoices();
+
+                if (choices.Count == 0)
+                {
+                    _offers.Dequeue();
+                    offer.OnDone?.Invoke();
+                    continue;
+                }
+
+                string title = offer.Kind == OfferKind.BossReward
+                    ? "БОСС ПОВЕРЖЕН!\n<size=60%>Выберите стихию пуль</size>"
+                    : $"НОВЫЙ УРОВЕНЬ {offer.Level}!\n<size=60%>Выберите награду</size>";
+
+                _showing = true;
+                GamePause.Set(this, true);
+                _panel.Show(title, choices, OnChosen);
                 return;
             }
 
@@ -93,52 +127,136 @@ namespace Tanks2D
             GamePause.Set(this, false);
         }
 
-        public bool IsAvailable(LevelUpOption option)
+        private void OnChosen(UpgradeChoice choice)
         {
-            switch (option)
+            choice.Apply?.Invoke();
+
+            Offer offer = _offers.Dequeue();
+            _showing = false;
+
+            if (_offers.Count == 0)
             {
-                case LevelUpOption.Tower: return _towers != null && _towers.CanAddTower;
-                case LevelUpOption.Damage: return true;
-                case LevelUpOption.MultiShot: return GameStats.BulletCount < GameStats.MaxBulletCount;
-                case LevelUpOption.Spread: return GameStats.BulletCount > 1 && GameStats.SpreadAngle < GameStats.MaxSpreadAngle;
-                default: return false;
+                _panel.Hide();
+                GamePause.Set(this, false);
+            }
+
+            offer.OnDone?.Invoke();
+            ShowNext();
+        }
+
+        // ---------------------------------------------------------------- Варианты наград
+
+        private List<UpgradeChoice> BuildLevelUpChoices()
+        {
+            var all = new List<UpgradeChoice>();
+            AddWeaponChoices(all);
+            if (GameStats.BossesDefeated > 0) AddElementChoices(all);
+
+            // Случайные варианты из доступных
+            for (int i = all.Count - 1; i > 0; i--)
+            {
+                int j = UnityEngine.Random.Range(0, i + 1);
+                (all[i], all[j]) = (all[j], all[i]);
+            }
+
+            if (all.Count > _choicesPerLevel) all.RemoveRange(_choicesPerLevel, all.Count - _choicesPerLevel);
+            return all;
+        }
+
+        private List<UpgradeChoice> BuildBossRewardChoices()
+        {
+            var choices = new List<UpgradeChoice>();
+            AddElementChoices(choices);
+            if (choices.Count == 0) AddWeaponChoices(choices);
+            return choices;
+        }
+
+        private void AddWeaponChoices(List<UpgradeChoice> list)
+        {
+            if (_towers != null && _towers.CanAddTower)
+            {
+                list.Add(new UpgradeChoice
+                {
+                    Id = "tower",
+                    Title = "Башня-помощник",
+                    Description = $"Стреляет сама ({GameStats.TowerCount} / {GameStats.MaxTowers})",
+                    Icon = VisualId.IconTower,
+                    Apply = () => _towers.AddTower()
+                });
+            }
+
+            list.Add(new UpgradeChoice
+            {
+                Id = "damage",
+                Title = $"Урон +{GameStats.XpDamageStep}",
+                Description = $"{GameStats.BulletDamage} → {GameStats.BulletDamage + GameStats.XpDamageStep}",
+                Icon = VisualId.IconDamage,
+                Apply = () => GameStats.BulletDamage += GameStats.XpDamageStep
+            });
+
+            if (GameStats.WallMaxHP < GameStats.MaxWallHP)
+            {
+                int nextHP = Mathf.Min(GameStats.MaxWallHP, GameStats.WallMaxHP + GameStats.XpWallHPStep);
+                list.Add(new UpgradeChoice
+                {
+                    Id = "wall",
+                    Title = $"Стена +{GameStats.XpWallHPStep} HP",
+                    Description = $"{GameStats.WallMaxHP} → {nextHP} HP и полный ремонт",
+                    Icon = VisualId.IconWallHP,
+                    Apply = () =>
+                    {
+                        GameStats.WallMaxHP = nextHP;
+                        if (Wall.ActiveInstance != null) Wall.ActiveInstance.UpgradeAndRepair();
+                    }
+                });
+            }
+
+            if (GameStats.BulletCount < GameStats.MaxBulletCount)
+            {
+                list.Add(new UpgradeChoice
+                {
+                    Id = "multishot",
+                    Title = "Пули +1",
+                    Description = $"Залп: {GameStats.BulletCount} → {GameStats.BulletCount + 1}",
+                    Icon = VisualId.IconMultiShot,
+                    Apply = () => GameStats.BulletCount = Mathf.Min(GameStats.MaxBulletCount, GameStats.BulletCount + 1)
+                });
+            }
+
+            if (GameStats.BulletCount > 1 && GameStats.SpreadAngle < GameStats.MaxSpreadAngle)
+            {
+                float next = Mathf.Min(GameStats.MaxSpreadAngle, GameStats.SpreadAngle + GameStats.SpreadStep);
+                list.Add(new UpgradeChoice
+                {
+                    Id = "spread",
+                    Title = "Шире разброс",
+                    Description = $"{GameStats.SpreadAngle:0}° → {next:0}°",
+                    Icon = VisualId.IconSpread,
+                    Apply = () => GameStats.SpreadAngle = next
+                });
             }
         }
 
-        public string Describe(LevelUpOption option)
+        private static void AddElementChoices(List<UpgradeChoice> list)
         {
-            switch (option)
-            {
-                case LevelUpOption.Tower:
-                    return $"<b>Башня-помощник</b>\nСтреляет сама ({GameStats.TowerCount} / {GameStats.MaxTowers})";
-                case LevelUpOption.Damage:
-                    return $"<b>Урон +{GameStats.XpDamageStep}</b>\n{GameStats.BulletDamage} → {GameStats.BulletDamage + GameStats.XpDamageStep}";
-                case LevelUpOption.MultiShot:
-                    return $"<b>Пули +1</b>\nЗалп: {GameStats.BulletCount} → {GameStats.BulletCount + 1}";
-                case LevelUpOption.Spread:
-                    float next = Mathf.Min(GameStats.MaxSpreadAngle, GameStats.SpreadAngle + GameStats.SpreadStep);
-                    return $"<b>Шире разброс</b>\n{GameStats.SpreadAngle:0}° → {next:0}°";
-                default:
-                    return option.ToString();
-            }
-        }
+            ElementCatalog catalog = ElementCatalog.Instance;
+            if (catalog == null) return;
 
-        private void Apply(LevelUpOption option)
-        {
-            switch (option)
+            foreach (ElementDefinition element in catalog.Elements)
             {
-                case LevelUpOption.Tower:
-                    if (_towers != null) _towers.AddTower();
-                    break;
-                case LevelUpOption.Damage:
-                    GameStats.BulletDamage += GameStats.XpDamageStep;
-                    break;
-                case LevelUpOption.MultiShot:
-                    GameStats.BulletCount = Mathf.Min(GameStats.MaxBulletCount, GameStats.BulletCount + 1);
-                    break;
-                case LevelUpOption.Spread:
-                    GameStats.SpreadAngle = Mathf.Min(GameStats.MaxSpreadAngle, GameStats.SpreadAngle + GameStats.SpreadStep);
-                    break;
+                if (element == null || element.IsMaxed) continue;
+
+                int level = element.Level;
+                ElementDefinition captured = element;
+
+                list.Add(new UpgradeChoice
+                {
+                    Id = "element:" + element.Id,
+                    Title = level == 0 ? $"{element.DisplayName} (новая стихия)" : $"{element.DisplayName} ур. {level + 1}",
+                    Description = element.DescribeLevel(level + 1),
+                    Icon = element.Icon,
+                    Apply = () => captured.Level = captured.Level + 1
+                });
             }
         }
     }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 
 namespace Tanks2D
 {
@@ -42,9 +43,16 @@ namespace Tanks2D
         [Tooltip("Сколько золота дадут за убийство Босса")]
         [SerializeField] private int bossGoldReward = 100;
 
+        [Header("Difficulty by Mission")]
+        [Tooltip("Прибавка к HP всех врагов за каждую следующую миссию (0.3 = +30%)")]
+        [SerializeField] private float _healthGrowthPerMission = 0.3f;
+
         [Header("Transition Settings (Переход после победы)")]
-        [SerializeField] private string campSceneName = "Camp";
-        [SerializeField] private float delayBeforeCamp = 3f;
+        [FormerlySerializedAs("campSceneName")]
+        [SerializeField] private string lobbySceneName = "Lobby";
+        [FormerlySerializedAs("delayBeforeCamp")]
+        [Tooltip("Пауза после выбора награды за босса перед переходом в лобби, сек.")]
+        [SerializeField] private float delayBeforeLobby = 1.5f;
 
         [Header("Music Settings (Настройки музыки)")]
         [SerializeField] private AudioSource musicAudioSource;
@@ -64,6 +72,8 @@ namespace Tanks2D
         public bool IsBossSpawned => _isBossSpawned;
         public bool IsBossDefeated => _isBossDefeated;
         public float BattleTime => _battleTime;
+        public int BossLevel => GameStats.Mission;
+        public float HealthMultiplier => 1f + _healthGrowthPerMission * Mathf.Max(0, GameStats.Mission - 1);
 
         // x1 в первую минуту, x2 во вторую, x4 в третью...
         public int SpawnMultiplier => 1 << Mathf.Clamp(Mathf.FloorToInt(_battleTime / Mathf.Max(1f, _doublingPeriod)), 0, Mathf.Clamp(_maxDoublings, 0, 20));
@@ -132,14 +142,17 @@ namespace Tanks2D
             }
 
             _isBossSpawned = true;
-            Debug.Log("[Spawner] ВНИМАНИЕ! ПОЯВИЛСЯ БОСС!");
+            Debug.Log($"[Spawner] ВНИМАНИЕ! ПОЯВИЛСЯ БОСС ур. {BossLevel}!");
             PlayMusic(bossMusic);
 
             float centerX = PlayField.Instance != null ? PlayField.Instance.Center.x : transform.position.x;
-            Spawn(bossPrefab, centerX, bossGoldReward, true);
+            GameObject boss = Spawn(bossPrefab, centerX, bossGoldReward, true);
+
+            BossAbilities abilities = boss.GetComponent<BossAbilities>();
+            if (abilities != null) abilities.Setup(BossLevel);
         }
 
-        private void Spawn(GameObject prefab, float x, int goldReward, bool isBoss)
+        private GameObject Spawn(GameObject prefab, float x, int goldReward, bool isBoss)
         {
             var position = new Vector3(x, GetSpawnY(), 0f);
             GameObject enemyGo = Instantiate(prefab, position, Quaternion.identity);
@@ -147,9 +160,11 @@ namespace Tanks2D
             PigEnemy enemy = enemyGo.GetComponent<PigEnemy>();
             if (enemy != null)
             {
-                enemy.Initialize(goldReward, isBoss);
+                enemy.Initialize(goldReward, isBoss, HealthMultiplier);
                 enemy.SetTargetWall(_wall);
             }
+
+            return enemyGo;
         }
 
         private float GetRandomSpawnX()
@@ -193,8 +208,13 @@ namespace Tanks2D
                 if (_isBossDefeated) return;
 
                 _isBossDefeated = true;
-                Debug.Log("[Spawner] БОСС ПОВЕРЖЕН! Переход в лагерь...");
-                Invoke(nameof(LoadCampScene), delayBeforeCamp);
+                GameStats.BossesDefeated++;
+                GameStats.Mission++;
+                Debug.Log("[Spawner] БОСС ПОВЕРЖЕН! Награда и переход в лобби...");
+
+                // Сначала награда (выбор стихии), потом лобби
+                if (ExperienceSystem.Instance != null) ExperienceSystem.Instance.OfferBossReward(ScheduleLobby);
+                else ScheduleLobby();
                 return;
             }
 
@@ -204,9 +224,15 @@ namespace Tanks2D
             if (_currentKillsCount >= killsNeededForBoss) SpawnBoss();
         }
 
-        private void LoadCampScene()
+        private void ScheduleLobby()
         {
-            SceneManager.LoadScene(campSceneName);
+            Invoke(nameof(LoadLobby), delayBeforeLobby);
+        }
+
+        private void LoadLobby()
+        {
+            GamePause.Clear();
+            SceneManager.LoadScene(lobbySceneName);
         }
 
         private EnemySpawnConfig GetRandomEnemyConfig()

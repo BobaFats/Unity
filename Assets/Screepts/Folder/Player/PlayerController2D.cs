@@ -4,8 +4,8 @@ using UnityEngine.InputSystem;
 namespace Tanks2D
 {
     // Герой стоит внизу экрана, пушка поворачивается в верхнюю полуплоскость.
-    // ПК: прицел за мышью, стрельба ЛКМ, перезарядка R.
-    // Телефон: палец задаёт прицел и стреляет, пока прижат; перезарядка кнопкой в HUD.
+    // Стрельба автоматическая. Целится игрок:
+    // ПК — мышью, телефон — пальцем по полю. Перезарядка автоматическая, вручную — R или кнопка в HUD.
     public class PlayerController2D : MonoBehaviour
     {
         [Header("References (Ссылки)")]
@@ -58,6 +58,7 @@ namespace Tanks2D
             }
 
             HandlePointer();
+            TryShoot();
 
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
@@ -78,11 +79,11 @@ namespace Tanks2D
             }
 
             bool isTouch = pointer is Touchscreen;
-            bool isFiring = pointer.press.isPressed && !_pressStartedOverUI;
+            bool isTouchingField = pointer.press.isPressed && !_pressStartedOverUI;
 
-            // Мышь целится всегда, палец — только пока касается поля
-            if (!isTouch || isFiring) AimAt(screenPosition);
-            if (isFiring) TryShoot();
+            // Целится игрок: мышь — всегда, палец — пока касается поля (иначе ствол держит последнее направление).
+            // Стреляет герой сам: автоатака без нажатий.
+            if (!isTouch || isTouchingField) AimAt(screenPosition);
         }
 
         // Вызывается кнопкой "Перезарядка" в HUD

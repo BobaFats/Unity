@@ -1,55 +1,60 @@
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Tanks2D
 {
-    // Окно выбора награды за уровень. Компонент висит на всегда активном объекте,
-    // а показывается/прячется дочерняя панель _root.
+    // Окно выбора награды. Кнопки создаются из шаблона под каждый вариант.
+    // Компонент висит на всегда активном объекте, показывается/прячется дочерняя панель _root.
     public class LevelUpPanel : MonoBehaviour
     {
-        [Serializable]
-        public class OptionView
-        {
-            public LevelUpOption option;
-            public Button button;
-            public TextMeshProUGUI text;
-        }
-
         [SerializeField] private GameObject _root;
         [SerializeField] private TextMeshProUGUI _title;
-        [SerializeField] private OptionView[] _options = Array.Empty<OptionView>();
+        [Tooltip("Шаблон кнопки варианта: внутри TextMeshProUGUI и (необязательно) UIVisualSlot для иконки")]
+        [SerializeField] private Button _optionTemplate;
+        [SerializeField] private Transform _optionsContainer;
 
-        private Action<LevelUpOption> _onChosen;
+        private readonly List<Button> _buttons = new List<Button>();
+        private List<UpgradeChoice> _choices = new List<UpgradeChoice>();
+        private Action<UpgradeChoice> _onChosen;
 
         public bool IsOpen => _root != null && _root.activeSelf;
+        public IReadOnlyList<UpgradeChoice> CurrentChoices => _choices;
 
         private void Awake()
         {
-            foreach (OptionView view in _options)
-            {
-                if (view.button == null) continue;
-                LevelUpOption option = view.option;
-                view.button.onClick.AddListener(() => Choose(option));
-            }
-
+            if (_optionTemplate != null) _optionTemplate.gameObject.SetActive(false);
             if (_root != null) _root.SetActive(false);
         }
 
-        public void Show(int level, Func<LevelUpOption, bool> isAvailable, Func<LevelUpOption, string> describe, Action<LevelUpOption> onChosen)
+        public void Show(string title, List<UpgradeChoice> choices, Action<UpgradeChoice> onChosen)
         {
+            _choices = choices;
             _onChosen = onChosen;
 
-            if (_title != null) _title.text = $"НОВЫЙ УРОВЕНЬ {level}!\n<size=60%>Выберите награду</size>";
+            if (_title != null) _title.text = title;
 
-            foreach (OptionView view in _options)
+            foreach (Button button in _buttons) Destroy(button.gameObject);
+            _buttons.Clear();
+
+            for (int i = 0; i < choices.Count; i++)
             {
-                if (view.button == null) continue;
+                UpgradeChoice choice = choices[i];
+                Button button = Instantiate(_optionTemplate, _optionsContainer != null ? _optionsContainer : _optionTemplate.transform.parent);
+                button.name = $"Option_{choice.Id}";
+                button.gameObject.SetActive(true);
 
-                bool available = isAvailable(view.option);
-                view.button.gameObject.SetActive(available);
-                if (available && view.text != null) view.text.text = describe(view.option);
+                TextMeshProUGUI text = button.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (text != null) text.text = $"<b>{choice.Title}</b>\n<size=80%>{choice.Description}</size>";
+
+                UIVisualSlot icon = button.GetComponentInChildren<UIVisualSlot>(true);
+                if (icon != null) icon.Configure(choice.Icon);
+
+                int index = i;
+                button.onClick.AddListener(() => Choose(index));
+                _buttons.Add(button);
             }
 
             if (_root != null) _root.SetActive(true);
@@ -60,11 +65,13 @@ namespace Tanks2D
             if (_root != null) _root.SetActive(false);
         }
 
-        private void Choose(LevelUpOption option)
+        public void Choose(int index)
         {
-            Action<LevelUpOption> callback = _onChosen;
+            if (index < 0 || index >= _choices.Count) return;
+
+            Action<UpgradeChoice> callback = _onChosen;
             _onChosen = null;
-            callback?.Invoke(option);
+            callback?.Invoke(_choices[index]);
         }
     }
 }

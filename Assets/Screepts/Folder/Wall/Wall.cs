@@ -86,6 +86,8 @@ namespace Tanks2D
         public void TakeDamage(int damageAmount)
         {
             if (IsGameOver) return;
+            // Босс повержен — миссия выиграна, остатки врагов стену уже не ломают
+            if (EnemySpawner2D.Instance != null && EnemySpawner2D.Instance.IsBossDefeated) return;
 
             _currentHP = Mathf.Max(0, _currentHP - damageAmount);
 

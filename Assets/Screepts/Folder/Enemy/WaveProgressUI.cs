@@ -3,18 +3,22 @@ using UnityEngine;
 
 namespace Tanks2D
 {
-    // Показывает в HUD, сколько врагов осталось до появления босса
+    // HUD: номер миссии, прогресс до босса, время боя и множитель потока врагов
     public class WaveProgressUI : MonoBehaviour
     {
         [SerializeField] private TextMeshProUGUI _text;
+        [Tooltip("Необязательно: отдельная надпись с номером миссии")]
+        [SerializeField] private TextMeshProUGUI _missionText;
 
         private void Update()
         {
+            if (_missionText != null) _missionText.text = $"Миссия {GameStats.Mission}";
+
             EnemySpawner2D spawner = EnemySpawner2D.Instance;
             if (_text == null || spawner == null) return;
 
             if (spawner.IsBossDefeated) _text.text = "<color=#5BE06A>ПОБЕДА!</color>";
-            else if (spawner.IsBossSpawned) _text.text = "<color=#FF5050>БОСС!</color>";
+            else if (spawner.IsBossSpawned) _text.text = $"<color=#FF5050>БОСС ур. {spawner.BossLevel}!</color>";
             else _text.text = $"До босса: {spawner.KillsCount} / {spawner.KillsNeededForBoss}";
 
             int minute = Mathf.FloorToInt(spawner.BattleTime / 60f);

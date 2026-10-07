@@ -413,6 +413,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PigEnemy
   maxHP: 15
   speed: 4
+  knockbackResistance: 0
+  knockbackSpeed: 8
   attackDamage: 5
   attackRate: 1.5
   attackDistance: 0.05
@@ -420,10 +422,12 @@ MonoBehaviour:
   visual: {fileID: 3413059376959378649}
   healthBar: {fileID: 4643103533063652601}
   damageTextPrefab: {fileID: 7739126329345863156, guid: 2b73c03676c09bb4483dca2be67c5cdd, type: 3}
-  goldTextPrefab: {fileID: 5227360391495661563, guid: 4ff1fccb43432164984128fcbd8d0a36, type: 3}
+  goldTextPrefab: {fileID: 0}
   hitFlashColor: {r: 1, g: 1, b: 1, a: 1}
   hitFlashDuration: 0.08
   deathFadeDuration: 0.35
+  slowTint: {r: 0.55, g: 0.85, b: 1, a: 1}
+  burnTint: {r: 1, g: 0.55, b: 0.2, a: 1}
 --- !u!1 &5241003605888573029
 GameObject:
   m_ObjectHideFlags: 0

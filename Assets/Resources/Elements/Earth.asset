@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e7c922277876e134daf1f751d20e2d68, type: 3}
+  m_Name: Earth
+  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.EarthElement
+  _id: earth
+  _displayName: "\u0417\u0435\u043C\u043B\u044F"
+  _icon: 22
+  _color: {r: 0.9, g: 0.68, b: 0.35, a: 1}
+  _maxLevel: 5
+  _baseChance: 0.1
+  _chancePerLevel: 0.08
+  _maxChance: 0.5
+  _order: 0
+  _critMultiplier: 2
+  _critMultiplierPerLevel: 0.25

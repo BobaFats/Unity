@@ -30,6 +30,8 @@ namespace Tanks2D
         public const float MaxSpreadAngle = 70f;
         public const int XpDamageStep = 3;
         public const int MaxTowers = 5;
+        public const int XpWallHPStep = 50;
+        public const int MaxWallHP = 1000;
 
         public static int BulletDamage { get; set; }
         public static float FireDelay { get; set; }
@@ -45,6 +47,13 @@ namespace Tanks2D
         // Опыт
         public static int Level { get; set; }
         public static int Experience { get; set; }
+
+        // Кампания: номер текущей миссии (= уровень босса) и сколько боссов побеждено
+        public static int Mission { get; set; }
+        public static int BossesDefeated { get; set; }
+
+        // Уровни стихий пуль по id стихии (0 — не изучена)
+        private static readonly Dictionary<string, int> _elementLevels = new Dictionary<string, int>();
 
         private static readonly Dictionary<UpgradeType, int> _levels = new Dictionary<UpgradeType, int>();
 
@@ -69,12 +78,26 @@ namespace Tanks2D
             TowerCount = 0;
             Level = 1;
             Experience = 0;
+            Mission = 1;
+            BossesDefeated = 0;
             _levels.Clear();
+            _elementLevels.Clear();
         }
 
         public static int GetLevel(UpgradeType type)
         {
             return _levels.TryGetValue(type, out int level) ? level : 1;
+        }
+
+        public static int GetElementLevel(string elementId)
+        {
+            return elementId != null && _elementLevels.TryGetValue(elementId, out int level) ? level : 0;
+        }
+
+        public static void SetElementLevel(string elementId, int level)
+        {
+            if (string.IsNullOrEmpty(elementId)) return;
+            _elementLevels[elementId] = Mathf.Max(0, level);
         }
 
         public static void IncrementLevel(UpgradeType type)

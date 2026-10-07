@@ -13,7 +13,7 @@ using Object = UnityEngine.Object;
 
 namespace Tanks2D.EditorTools
 {
-    // Собирает вертикальную (портретную) версию игры: заглушки, каталог визуала, префабы, сцены Menu / Battle / Camp.
+    // Собирает вертикальную (портретную) версию игры: заглушки, каталоги визуала и стихий, префабы, сцены Menu / Lobby / Battle.
     // Меню: Tools > Vertical Shooter.
     public static class VerticalProjectBuilder
     {
@@ -22,12 +22,14 @@ namespace Tanks2D.EditorTools
         private const string ResourcesFolder = "Assets/Resources";
         private const string PlaceholderFolder = ResourcesFolder + "/" + PlaceholderSprites.ResourceFolder;
         private const string CatalogPath = ResourcesFolder + "/" + VisualCatalog.ResourcePath + ".asset";
+        private const string ElementsFolder = ResourcesFolder + "/Elements";
+        private const string ElementCatalogPath = ResourcesFolder + "/" + ElementCatalog.ResourcePath + ".asset";
         private const string PrefabFolder = "Assets/Prefab/Vertical";
         private const string SceneFolder = "Assets/Scenes/Vertical";
 
         public const string MenuSceneName = "Menu";
         public const string BattleSceneName = "Battle";
-        public const string CampSceneName = "Camp";
+        public const string LobbySceneName = "Lobby";
 
         private static readonly Vector2 FieldSize = new Vector2(9f, 16f);
         private static readonly Vector2 ReferenceResolution = new Vector2(1080f, 1920f);
@@ -42,7 +44,7 @@ namespace Tanks2D.EditorTools
 
         private static string MenuScenePath => $"{SceneFolder}/{MenuSceneName}.unity";
         private static string BattleScenePath => $"{SceneFolder}/{BattleSceneName}.unity";
-        private static string CampScenePath => $"{SceneFolder}/{CampSceneName}.unity";
+        private static string LobbyScenePath => $"{SceneFolder}/{LobbySceneName}.unity";
 
         public static bool IsBuilt => File.Exists(BattleScenePath);
 
@@ -53,7 +55,6 @@ namespace Tanks2D.EditorTools
             public GameObject Chicken;
             public GameObject Boss;
             public GameObject DamageText;
-            public GameObject GoldText;
             public GameObject WallDamageText;
             public GameObject Tower;
         }
@@ -64,8 +65,8 @@ namespace Tanks2D.EditorTools
         public static void BuildAllMenu()
         {
             string message = IsBuilt
-                ? $"Префабы в {PrefabFolder} и сцены в {SceneFolder} будут пересозданы (ручные правки в них потеряются).\n\nКаталог визуала ({CatalogPath}) НЕ перезаписывается — назначенные спрайты сохранятся."
-                : $"Будут созданы:\n• заглушки и каталог визуала в {ResourcesFolder}\n• префабы в {PrefabFolder}\n• сцены Menu / Battle / Camp в {SceneFolder}\n• портретные настройки Player Settings\n\nСтарые сцены и префабы не изменяются.";
+                ? $"Префабы в {PrefabFolder} и сцены в {SceneFolder} будут пересозданы (ручные правки в них потеряются).\n\nКаталоги визуала и стихий НЕ перезаписываются — назначенные спрайты и настройки сохранятся."
+                : $"Будут созданы:\n• заглушки, каталог визуала и стихии в {ResourcesFolder}\n• префабы в {PrefabFolder}\n• сцены Menu / Lobby / Battle в {SceneFolder}\n• портретные настройки Player Settings\n\nСтарые сцены и префабы не изменяются.";
 
             if (!EditorUtility.DisplayDialog("Vertical Shooter", message, "Собрать", "Отмена")) return;
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -131,6 +132,7 @@ namespace Tanks2D.EditorTools
 
                 CreatePlaceholderSprites();
                 CreateOrUpdateCatalog();
+                CreateOrUpdateElements();
 
                 EditorUtility.DisplayProgressBar("Vertical Shooter", "Префабы...", 0.3f);
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -138,7 +140,7 @@ namespace Tanks2D.EditorTools
 
                 EditorUtility.DisplayProgressBar("Vertical Shooter", "Сцены...", 0.6f);
                 BuildMenuScene();
-                BuildCampScene();
+                BuildLobbyScene();
                 BuildBattleScene(prefabs);
 
                 ConfigureBuildSettings();
@@ -153,7 +155,7 @@ namespace Tanks2D.EditorTools
             }
 
             EditorSceneManager.OpenScene(BattleScenePath);
-            Debug.Log("[Vertical Shooter] Готово. Запускайте сцену Menu или Battle. Арт назначается в " + CatalogPath);
+            Debug.Log("[Vertical Shooter] Готово. Запускайте сцену Menu (или сразу Battle). Арт назначается в " + CatalogPath);
         }
 
         private static void EnsureFolder(string path)
@@ -228,10 +230,58 @@ namespace Tanks2D.EditorTools
             Add(catalog, VisualId.IconTower, PlaceholderShape.Rectangle, new Color(0.3f, 0.8f, 0.75f), Vector2.one, "БШН");
             Add(catalog, VisualId.IconMultiShot, PlaceholderShape.Triangle, new Color(0.72f, 0.55f, 1f), Vector2.one, "x2");
             Add(catalog, VisualId.IconSpread, PlaceholderShape.Diamond, new Color(0.55f, 0.88f, 1f), Vector2.one, "<>");
+            Add(catalog, VisualId.BossShield, PlaceholderShape.Circle, new Color(0.45f, 0.7f, 1f, 0.45f), new Vector2(3.2f, 3.2f), "");
+            Add(catalog, VisualId.ElementFire, PlaceholderShape.Triangle, new Color(1f, 0.5f, 0.15f), Vector2.one, "ОГН");
+            Add(catalog, VisualId.ElementIce, PlaceholderShape.Diamond, new Color(0.5f, 0.85f, 1f), Vector2.one, "ХОЛ");
+            Add(catalog, VisualId.ElementWind, PlaceholderShape.Circle, new Color(0.75f, 1f, 0.75f), Vector2.one, "ВЕТ");
+            Add(catalog, VisualId.ElementEarth, PlaceholderShape.Rectangle, new Color(0.85f, 0.65f, 0.35f), Vector2.one, "ЗЕМ");
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
             VisualCatalog.SetInstance(catalog);
+        }
+
+        // Ассеты стихий создаются только если их нет — настройки баланса, сделанные вручную, сохраняются
+        private static void CreateOrUpdateElements()
+        {
+            EnsureFolder(ElementsFolder);
+
+            var catalog = AssetDatabase.LoadAssetAtPath<ElementCatalog>(ElementCatalogPath);
+            if (catalog == null)
+            {
+                catalog = ScriptableObject.CreateInstance<ElementCatalog>();
+                AssetDatabase.CreateAsset(catalog, ElementCatalogPath);
+            }
+
+            catalog.Add(CreateElement<EarthElement>("Earth", "earth", "Земля", VisualId.ElementEarth, new Color(0.9f, 0.68f, 0.35f), 0.1f, 0.08f, 0.5f, 0));
+            catalog.Add(CreateElement<FireElement>("Fire", "fire", "Огонь", VisualId.ElementFire, new Color(1f, 0.5f, 0.15f), 0.2f, 0.1f, 0.8f, 10));
+            catalog.Add(CreateElement<IceElement>("Ice", "ice", "Холод", VisualId.ElementIce, new Color(0.5f, 0.85f, 1f), 0.2f, 0.1f, 0.8f, 20));
+            catalog.Add(CreateElement<WindElement>("Wind", "wind", "Ветер", VisualId.ElementWind, new Color(0.7f, 1f, 0.7f), 0.15f, 0.08f, 0.6f, 30));
+
+            EditorUtility.SetDirty(catalog);
+            AssetDatabase.SaveAssets();
+            ElementCatalog.SetInstance(catalog);
+        }
+
+        private static T CreateElement<T>(string fileName, string id, string displayName, VisualId icon, Color color,
+            float baseChance, float chancePerLevel, float maxChance, int order) where T : ElementDefinition
+        {
+            string path = $"{ElementsFolder}/{fileName}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (existing != null) return existing;
+
+            T element = ScriptableObject.CreateInstance<T>();
+            AssetDatabase.CreateAsset(element, path);
+            Wire(element,
+                ("_id", id),
+                ("_displayName", displayName),
+                ("_icon", icon),
+                ("_color", color),
+                ("_baseChance", baseChance),
+                ("_chancePerLevel", chancePerLevel),
+                ("_maxChance", maxChance),
+                ("_order", order));
+            return element;
         }
 
         private static void Add(VisualCatalog catalog, VisualId id, PlaceholderShape shape, Color color, Vector2 size, string label)
@@ -246,14 +296,13 @@ namespace Tanks2D.EditorTools
             var prefabs = new Prefabs
             {
                 DamageText = CreateFloatingTextPrefab("FloatingText_Damage", Color.white, 4f),
-                GoldText = CreateFloatingTextPrefab("FloatingText_Gold", new Color(1f, 0.84f, 0f), 4.5f),
                 WallDamageText = CreateFloatingTextPrefab("FloatingText_Wall", new Color(0.75f, 0.35f, 1f), 4.5f),
                 Bullet = CreateBulletPrefab()
             };
 
-            prefabs.Pig = CreateEnemyPrefab("Enemy_Pig", VisualId.EnemyPig, 30, 2f, 10, 1, prefabs);
-            prefabs.Chicken = CreateEnemyPrefab("Enemy_Chicken", VisualId.EnemyChicken, 15, 4f, 5, 2, prefabs);
-            prefabs.Boss = CreateEnemyPrefab("Boss_Pig", VisualId.Boss, 300, 0.5f, 50, 15, prefabs);
+            prefabs.Pig = CreateEnemyPrefab("Enemy_Pig", VisualId.EnemyPig, 30, 2f, 10, 1, 0f, false, prefabs);
+            prefabs.Chicken = CreateEnemyPrefab("Enemy_Chicken", VisualId.EnemyChicken, 15, 4f, 5, 2, 0f, false, prefabs);
+            prefabs.Boss = CreateEnemyPrefab("Boss_Pig", VisualId.Boss, 300, 0.5f, 30, 15, 0.7f, true, prefabs);
             prefabs.Tower = CreateTowerPrefab(prefabs.Bullet);
             return prefabs;
         }
@@ -293,7 +342,8 @@ namespace Tanks2D.EditorTools
             return SavePrefab(go, "Bullet");
         }
 
-        private static GameObject CreateEnemyPrefab(string name, VisualId visualId, int maxHP, float speed, int attackDamage, int xpReward, Prefabs prefabs)
+        private static GameObject CreateEnemyPrefab(string name, VisualId visualId, int maxHP, float speed, int attackDamage, int xpReward,
+            float knockbackResistance, bool isBoss, Prefabs prefabs)
         {
             var go = new GameObject(name);
             VisualSlot visual = go.AddComponent<VisualSlot>();
@@ -324,8 +374,21 @@ namespace Tanks2D.EditorTools
                 ("visual", visual),
                 ("healthBar", healthBar),
                 ("damageTextPrefab", prefabs.DamageText),
-                ("goldTextPrefab", prefabs.GoldText),
-                ("xpReward", xpReward));
+                ("goldTextPrefab", null),
+                ("xpReward", xpReward),
+                ("knockbackResistance", knockbackResistance));
+
+            if (isBoss)
+            {
+                // Щит (способность ур. 1) — полупрозрачный круг поверх босса, по умолчанию скрыт
+                var shield = new GameObject("Shield");
+                shield.transform.SetParent(go.transform, false);
+                shield.AddComponent<VisualSlot>().Configure(VisualId.BossShield, 13, false);
+                shield.SetActive(false);
+
+                BossAbilities abilities = go.AddComponent<BossAbilities>();
+                Wire(abilities, ("_shieldVisual", shield));
+            }
 
             return SavePrefab(go, name);
         }
@@ -395,12 +458,12 @@ namespace Tanks2D.EditorTools
                 ("newGameButton", newGame),
                 ("loadGameButton", loadGame),
                 ("settingsButton", settings),
-                ("gameplaySceneName", BattleSceneName));
+                ("gameplaySceneName", LobbySceneName));
 
             EditorSceneManager.SaveScene(scene, MenuScenePath);
         }
 
-        private static void BuildCampScene()
+        private static void BuildLobbyScene()
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             CreateCamera(null);
@@ -408,25 +471,33 @@ namespace Tanks2D.EditorTools
 
             RectTransform area = CreateCanvas("Canvas");
 
-            TextMeshProUGUI title = CreateText(area, "Title", "ЛАГЕРЬ", 120, TextAlignmentOptions.Center);
-            SetAnchors(title.rectTransform, new Vector2(0f, 0.75f), new Vector2(1f, 0.9f));
+            TextMeshProUGUI title = CreateText(area, "Title", "ЛОББИ", 120, TextAlignmentOptions.Center);
+            SetAnchors(title.rectTransform, new Vector2(0f, 0.84f), new Vector2(1f, 0.95f));
 
-            TextMeshProUGUI info = CreateText(area, "Info", "Босс повержен!\nУлучшения и золото сохранены.", 56, TextAlignmentOptions.Center);
-            SetAnchors(info.rectTransform, new Vector2(0.05f, 0.58f), new Vector2(0.95f, 0.74f));
+            TextMeshProUGUI mission = CreateText(area, "MissionText", "Миссия 1", 90, TextAlignmentOptions.Center);
+            SetAnchors(mission.rectTransform, new Vector2(0.05f, 0.7f), new Vector2(0.95f, 0.83f));
+            Wire(area.gameObject.AddComponent<LobbyUI>(), ("_missionText", mission));
 
-            RectTransform goldRow = CreateGoldCounter(area, "Золото: {0}");
-            SetAnchors(goldRow, new Vector2(0.2f, 0.5f), new Vector2(0.8f, 0.56f));
+            RectTransform statsPanel = CreateRect("StatsPanel", area);
+            SetAnchors(statsPanel, new Vector2(0.05f, 0.33f), new Vector2(0.95f, 0.68f));
+            AddImage(statsPanel, PanelColor);
+
+            TextMeshProUGUI stats = CreateText(statsPanel, "StatsText", "", 40, TextAlignmentOptions.TopLeft);
+            Stretch(stats.rectTransform);
+            stats.rectTransform.offsetMin = new Vector2(30f, 30f);
+            stats.rectTransform.offsetMax = new Vector2(-30f, -30f);
+            Wire(stats.gameObject.AddComponent<StatsDisplay>(), ("statsText", stats));
 
             RectTransform buttons = CreateVerticalGroup(area, "Buttons", 40);
-            SetAnchors(buttons, new Vector2(0.15f, 0.2f), new Vector2(0.85f, 0.42f));
+            SetAnchors(buttons, new Vector2(0.12f, 0.06f), new Vector2(0.88f, 0.29f));
 
-            Button nextBattle = CreateButton(buttons, "NextBattleButton", "Следующий бой", AccentButtonColor, 180);
-            Wire(nextBattle.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", BattleSceneName), ("_resetProgress", false));
+            Button start = CreateButton(buttons, "StartMissionButton", "Начать миссию", AccentButtonColor, 80);
+            Wire(start.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", BattleSceneName), ("_resetProgress", false));
 
-            Button menu = CreateButton(buttons, "MenuButton", "Главное меню", ButtonColor, 160);
+            Button menu = CreateButton(buttons, "MenuButton", "Главное меню", ButtonColor, 64);
             Wire(menu.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", MenuSceneName), ("_resetProgress", false));
 
-            EditorSceneManager.SaveScene(scene, CampScenePath);
+            EditorSceneManager.SaveScene(scene, LobbyScenePath);
         }
 
         private static void BuildBattleScene(Prefabs prefabs)
@@ -472,22 +543,23 @@ namespace Tanks2D.EditorTools
                 ("_doublingPeriod", 60f),
                 ("_maxAliveEnemies", 50),
                 ("_spawnDuringBoss", true),
-                ("bossGoldReward", 100),
-                ("campSceneName", CampSceneName),
-                ("delayBeforeCamp", 3f),
+                ("bossGoldReward", 0),
+                ("_healthGrowthPerMission", 0.3f),
+                ("lobbySceneName", LobbySceneName),
+                ("delayBeforeLobby", 1.5f),
                 ("musicAudioSource", music),
                 ("normalWaveMusic", AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Music/Музыка игра.mp3")),
                 ("bossMusic", AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Music/Босс.mp3")));
 
             SetEnemyConfigs(spawner,
-                ("Свинья", prefabs.Pig, 70, 1),
-                ("Курица", prefabs.Chicken, 30, 3));
+                ("Свинья", prefabs.Pig, 70, 0),
+                ("Курица", prefabs.Chicken, 30, 0));
 
             // --- Интерфейс
             RectTransform area = CreateCanvas("HUD");
             BuildTopBar(area, wall);
             BuildBottomBar(area, player);
-            BuildShop(area);
+            BuildPauseMenu(area);
             LevelUpPanel levelUpPanel = BuildLevelUp(area);
             BuildGameOver(area, wall);
 
@@ -580,24 +652,23 @@ namespace Tanks2D.EditorTools
             bar.sizeDelta = new Vector2(0f, 310f);
             AddImage(bar, BarColor);
 
-            // Строка 1: золото | прогресс | магазин
-            RectTransform gold = CreateGoldCounter(bar, "{0}");
-            SetAnchors(gold, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f));
-            gold.anchoredPosition = new Vector2(30f, -20f);
-            gold.sizeDelta = new Vector2(320f, 100f);
+            // Строка 1: миссия | прогресс | пауза
+            TextMeshProUGUI mission = CreateText(bar, "MissionText", "Миссия 1", 46, TextAlignmentOptions.MidlineLeft);
+            SetAnchors(mission.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f));
+            mission.rectTransform.anchoredPosition = new Vector2(30f, -20f);
+            mission.rectTransform.sizeDelta = new Vector2(280f, 100f);
 
             TextMeshProUGUI progress = CreateText(bar, "WaveProgress", "До босса: 0 / 10", 44, TextAlignmentOptions.Center);
-            SetAnchors(progress.rectTransform, new Vector2(0.3f, 1f), new Vector2(0.7f, 1f), new Vector2(0.5f, 1f));
+            SetAnchors(progress.rectTransform, new Vector2(0.3f, 1f), new Vector2(0.75f, 1f), new Vector2(0.5f, 1f));
             progress.rectTransform.anchoredPosition = new Vector2(0f, -20f);
             progress.rectTransform.sizeDelta = new Vector2(0f, 100f);
-            progress.gameObject.AddComponent<WaveProgressUI>();
-            Wire(progress.GetComponent<WaveProgressUI>(), ("_text", progress));
+            Wire(progress.gameObject.AddComponent<WaveProgressUI>(), ("_text", progress), ("_missionText", mission));
 
-            Button shopButton = CreateButton(bar, "OpenShopButton", "Магазин", AccentButtonColor, 100);
-            RectTransform shopRect = (RectTransform)shopButton.transform;
-            SetAnchors(shopRect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
-            shopRect.anchoredPosition = new Vector2(-30f, -20f);
-            shopRect.sizeDelta = new Vector2(280f, 100f);
+            Button pauseButton = CreateButton(bar, "PauseButton", "II", ButtonColor, 60);
+            RectTransform pauseRect = (RectTransform)pauseButton.transform;
+            SetAnchors(pauseRect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f));
+            pauseRect.anchoredPosition = new Vector2(-30f, -20f);
+            pauseRect.sizeDelta = new Vector2(110f, 100f);
 
             // Строка 2: HP стены
             Slider wallSlider = CreateSlider(bar, "WallHPSlider", new Color(0.3f, 0.85f, 0.35f));
@@ -623,9 +694,6 @@ namespace Tanks2D.EditorTools
             Stretch(xpText.rectTransform);
 
             Wire(xpRect.gameObject.AddComponent<XpBarUI>(), ("_slider", xpSlider), ("_text", xpText));
-
-            // Ссылку на кнопку магазина ShopController получит в BuildShop
-            shopButton.gameObject.name = "OpenShopButton";
         }
 
         private static void BuildBottomBar(RectTransform area, PlayerController2D player)
@@ -661,87 +729,46 @@ namespace Tanks2D.EditorTools
                 ("playerController", player));
         }
 
-        private static void BuildShop(RectTransform area)
+        private static void BuildPauseMenu(RectTransform area)
         {
-            RectTransform panel = CreateRect("ShopPanel", area);
+            RectTransform panel = CreateRect("PausePanel", area);
             Stretch(panel);
             AddImage(panel, DimColor);
 
             RectTransform window = CreateRect("Window", panel);
-            SetAnchors(window, new Vector2(0.04f, 0.08f), new Vector2(0.96f, 0.92f));
+            SetAnchors(window, new Vector2(0.06f, 0.12f), new Vector2(0.94f, 0.88f));
             AddImage(window, PanelColor);
 
             VerticalLayoutGroup layout = window.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(40, 40, 40, 40);
-            layout.spacing = 22f;
+            layout.spacing = 30f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
-            AddLayoutHeight(CreateText(window, "Title", "МАГАЗИН", 80, TextAlignmentOptions.Center).gameObject, 100);
-            AddLayoutHeight(CreateGoldCounter(window, "Золото: {0}").gameObject, 80);
+            AddLayoutHeight(CreateText(window, "Title", "ПАУЗА", 90, TextAlignmentOptions.Center).gameObject, 120);
 
-            TextMeshProUGUI stats = CreateText(window, "StatsText", "", 38, TextAlignmentOptions.TopLeft);
-            AddLayoutHeight(stats.gameObject, 250);
+            TextMeshProUGUI stats = CreateText(window, "StatsText", "", 36, TextAlignmentOptions.TopLeft);
+            stats.gameObject.AddComponent<LayoutElement>().flexibleHeight = 1f;
             Wire(stats.gameObject.AddComponent<StatsDisplay>(), ("statsText", stats));
 
-            CreateUpgradeRow(window, UpgradeType.Damage, VisualId.IconDamage, "Урон пули", 10, 1.5f, 1f, 0f);
-            CreateUpgradeRow(window, UpgradeType.FireRate, VisualId.IconFireRate, "Скорострельность", 25, 1.6f, -0.04f, 0.1f);
-            CreateUpgradeRow(window, UpgradeType.ReloadTime, VisualId.IconReload, "Перезарядка", 10, 1.5f, -0.2f, 0.4f);
-            CreateUpgradeRow(window, UpgradeType.MaxAmmo, VisualId.IconAmmo, "Размер обоймы", 30, 1.7f, 5f, 50f);
-            CreateUpgradeRow(window, UpgradeType.WallHP, VisualId.IconWallHP, "Прочность стены", 15, 1.6f, 50f, 500f);
+            Button resume = CreateButton(window, "ResumeButton", "Продолжить", AccentButtonColor, 64);
+            AddLayoutHeight(resume.gameObject, 140);
 
-            var spacer = CreateRect("Spacer", window).gameObject;
-            spacer.AddComponent<LayoutElement>().flexibleHeight = 1f;
+            Button lobby = CreateButton(window, "LobbyButton", "Выйти в лобби", ButtonColor, 56);
+            AddLayoutHeight(lobby.gameObject, 120);
+            Wire(lobby.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", LobbySceneName), ("_resetProgress", false));
 
-            Button close = CreateButton(window, "CloseButton", "Закрыть", DangerButtonColor, 56);
-            AddLayoutHeight(close.gameObject, 130);
+            Button menu = CreateButton(window, "MenuButton", "Главное меню", ButtonColor, 56);
+            AddLayoutHeight(menu.gameObject, 120);
+            Wire(menu.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", MenuSceneName), ("_resetProgress", false));
 
-            var shopGo = new GameObject("ShopController");
-            ShopController shop = shopGo.AddComponent<ShopController>();
-            Button open = area.Find("TopBar/OpenShopButton").GetComponent<Button>();
-            Wire(shop, ("shopPanel", panel.gameObject), ("openButton", open), ("closeButton", close));
+            PauseMenu pauseMenu = new GameObject("PauseMenu").AddComponent<PauseMenu>();
+            Button pauseButton = area.Find("TopBar/PauseButton").GetComponent<Button>();
+            Wire(pauseMenu, ("_panel", panel.gameObject), ("_pauseButton", pauseButton), ("_resumeButton", resume));
 
             panel.gameObject.SetActive(false);
-        }
-
-        private static void CreateUpgradeRow(RectTransform parent, UpgradeType type, VisualId icon, string title,
-            int basePrice, float multiplier, float step, float limit)
-        {
-            RectTransform row = CreateRect($"Upgrade_{type}", parent);
-            AddLayoutHeight(row.gameObject, 140);
-            AddImage(row, new Color(1f, 1f, 1f, 0.06f));
-
-            HorizontalLayoutGroup layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(20, 20, 15, 15);
-            layout.spacing = 24f;
-            layout.childAlignment = TextAnchor.MiddleLeft;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-
-            Image iconImage = CreateIcon(row, "Icon", icon, new Vector2(110f, 110f), true);
-            LayoutElement iconLayout = iconImage.gameObject.AddComponent<LayoutElement>();
-            iconLayout.preferredWidth = 110f;
-
-            TextMeshProUGUI info = CreateText(row, "Info", title, 38, TextAlignmentOptions.MidlineLeft);
-            info.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-
-            Button buy = CreateButton(row, "BuyButton", "Купить", AccentButtonColor, 44);
-            buy.gameObject.AddComponent<LayoutElement>().preferredWidth = 230f;
-
-            UpgradeButton upgrade = row.gameObject.AddComponent<UpgradeButton>();
-            Wire(upgrade,
-                ("upgradeInfoText", info),
-                ("buyButton", buy),
-                ("upgradeType", type),
-                ("upgradeName", title),
-                ("basePrice", basePrice),
-                ("priceMultiplier", multiplier),
-                ("stepPerLevel", step),
-                ("limit", limit));
         }
 
         private static LevelUpPanel BuildLevelUp(RectTransform area)
@@ -770,42 +797,24 @@ namespace Tanks2D.EditorTools
             TextMeshProUGUI title = CreateText(window, "Title", "НОВЫЙ УРОВЕНЬ!", 72, TextAlignmentOptions.Center);
             AddLayoutHeight(title.gameObject, 170);
 
-            var options = new (LevelUpOption option, VisualId icon)[]
-            {
-                (LevelUpOption.Tower, VisualId.IconTower),
-                (LevelUpOption.Damage, VisualId.IconDamage),
-                (LevelUpOption.MultiShot, VisualId.IconMultiShot),
-                (LevelUpOption.Spread, VisualId.IconSpread)
-            };
+            // Шаблон варианта: иконка слева, текст справа. Кнопки создаются из него при показе окна.
+            Button template = CreateButton(window, "OptionTemplate", "Вариант", new Color(0.22f, 0.24f, 0.32f), 44);
+            AddLayoutHeight(template.gameObject, 170);
 
-            var so = new SerializedObject(levelUp);
-            SerializedProperty array = so.FindProperty("_options");
-            array.arraySize = options.Length;
+            TextMeshProUGUI text = template.GetComponentInChildren<TextMeshProUGUI>();
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.rectTransform.offsetMin = new Vector2(190f, 10f);
 
-            for (int i = 0; i < options.Length; i++)
-            {
-                Button button = CreateButton(window, $"Option_{options[i].option}", options[i].option.ToString(), new Color(0.22f, 0.24f, 0.32f), 44);
-                AddLayoutHeight(button.gameObject, 170);
+            Image icon = CreateIcon(template.transform, "Icon", VisualId.IconDamage, new Vector2(130f, 130f), true);
+            SetAnchors(icon.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
+            icon.rectTransform.anchoredPosition = new Vector2(30f, 0f);
+            icon.rectTransform.sizeDelta = new Vector2(130f, 130f);
 
-                // Иконка слева, текст справа
-                TextMeshProUGUI text = button.GetComponentInChildren<TextMeshProUGUI>();
-                text.alignment = TextAlignmentOptions.MidlineLeft;
-                text.rectTransform.offsetMin = new Vector2(190f, 10f);
-
-                Image icon = CreateIcon(button.transform, "Icon", options[i].icon, new Vector2(130f, 130f), true);
-                SetAnchors(icon.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
-                icon.rectTransform.anchoredPosition = new Vector2(30f, 0f);
-                icon.rectTransform.sizeDelta = new Vector2(130f, 130f);
-
-                SerializedProperty element = array.GetArrayElementAtIndex(i);
-                element.FindPropertyRelative("option").intValue = (int)options[i].option;
-                element.FindPropertyRelative("button").objectReferenceValue = button;
-                element.FindPropertyRelative("text").objectReferenceValue = text;
-            }
-
-            so.FindProperty("_root").objectReferenceValue = panel.gameObject;
-            so.FindProperty("_title").objectReferenceValue = title;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            Wire(levelUp,
+                ("_root", panel.gameObject),
+                ("_title", title),
+                ("_optionTemplate", template),
+                ("_optionsContainer", window));
 
             panel.gameObject.SetActive(false);
             return levelUp;
@@ -823,11 +832,14 @@ namespace Tanks2D.EditorTools
             RectTransform buttons = CreateVerticalGroup(panel, "Buttons", 40);
             SetAnchors(buttons, new Vector2(0.15f, 0.3f), new Vector2(0.85f, 0.52f));
 
-            Button restart = CreateButton(buttons, "RestartButton", "Начать заново", AccentButtonColor, 64);
-            Button menu = CreateButton(buttons, "MenuButton", "Главное меню", ButtonColor, 64);
-            Wire(menu.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", MenuSceneName), ("_resetProgress", true));
+            // В лобби — прогресс сохраняется, миссию можно перезапустить; «Новая игра» — полный сброс
+            Button lobby = CreateButton(buttons, "LobbyButton", "В лобби", AccentButtonColor, 64);
+            Wire(lobby.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", LobbySceneName), ("_resetProgress", false));
 
-            Wire(wall, ("gameOverPanel", panel.gameObject), ("restartButton", restart));
+            Button newGame = CreateButton(buttons, "NewGameButton", "Новая игра", ButtonColor, 64);
+            Wire(newGame.gameObject.AddComponent<SceneLoadButton>(), ("_sceneName", LobbySceneName), ("_resetProgress", true));
+
+            Wire(wall, ("gameOverPanel", panel.gameObject), ("restartButton", null));
 
             panel.gameObject.SetActive(false);
         }
@@ -1014,32 +1026,6 @@ namespace Tanks2D.EditorTools
             return image;
         }
 
-        private static RectTransform CreateGoldCounter(Transform parent, string format)
-        {
-            RectTransform row = CreateRect("Gold", parent);
-
-            HorizontalLayoutGroup layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 16f;
-            layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = true;
-
-            Image icon = CreateIcon(row, "CoinIcon", VisualId.Coin, new Vector2(70f, 70f), true);
-            LayoutElement iconLayout = icon.gameObject.AddComponent<LayoutElement>();
-            iconLayout.preferredWidth = 70f;
-
-            TextMeshProUGUI text = CreateText(row, "GoldText", "0", 52, TextAlignmentOptions.MidlineLeft);
-            text.color = new Color(1f, 0.84f, 0f);
-            text.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-
-            WalletUI walletUI = row.gameObject.AddComponent<WalletUI>();
-            Wire(walletUI, ("_goldText", text), ("_format", format));
-
-            return row;
-        }
-
         private static RectTransform CreateVerticalGroup(Transform parent, string name, float spacing)
         {
             RectTransform rect = CreateRect(name, parent);
@@ -1060,8 +1046,8 @@ namespace Tanks2D.EditorTools
             EditorBuildSettings.scenes = new[]
             {
                 new EditorBuildSettingsScene(MenuScenePath, true),
-                new EditorBuildSettingsScene(BattleScenePath, true),
-                new EditorBuildSettingsScene(CampScenePath, true)
+                new EditorBuildSettingsScene(LobbyScenePath, true),
+                new EditorBuildSettingsScene(BattleScenePath, true)
             };
         }
 
