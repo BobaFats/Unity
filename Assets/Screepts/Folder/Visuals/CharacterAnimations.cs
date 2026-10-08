@@ -27,6 +27,9 @@ namespace Tanks2D
 
         [Min(0.1f)] public float framesPerSecond = 12f;
 
+        [Tooltip("Скорость воспроизведения конкретно этой анимации")]
+        [Min(0.01f)] public float speed = 1f;
+
         public bool HasContent => clip != null || (frames != null && frames.Length > 0);
 
         public float Duration
@@ -48,7 +51,7 @@ namespace Tanks2D
     {
         [Tooltip("Слот внешнего вида. Пусто — берётся с этого же объекта")]
         [SerializeField] private VisualSlot _visual;
-        [Tooltip("Общая скорость анимаций")]
+        [Tooltip("Общая скорость всех анимаций объекта")]
         [SerializeField, Min(0.01f)] private float _speed = 1f;
 
         [Header("Анимации")]
@@ -117,7 +120,10 @@ namespace Tanks2D
 
             if (animation == CharacterAnimation.Death) _dead = true;
             StartSlot(animation, true);
-            return slot.Duration / _speed;
+
+            // Возвращаем реальную длительность с учетом индивидуальной и общей скорости
+            float dynamicSpeed = _speed * slot.speed;
+            return slot.Duration / Mathf.Max(0.001f, dynamicSpeed);
         }
 
         private void StartSlot(CharacterAnimation animation, bool oneShot)
@@ -146,7 +152,9 @@ namespace Tanks2D
             bool paused = GamePause.IsPaused;
             if (paused && _current != CharacterAnimation.Death) return;
 
-            _time += (paused ? Time.unscaledDeltaTime : Time.deltaTime) * _speed;
+            // Модификация: Умножаем общую скорость на скорость текущего слота анимации
+            float finalSpeed = _speed * _currentSlot.speed;
+            _time += (paused ? Time.unscaledDeltaTime : Time.deltaTime) * finalSpeed;
 
             if (_oneShot && _time >= _currentSlot.Duration)
             {
