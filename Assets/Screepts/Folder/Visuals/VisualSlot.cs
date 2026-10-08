@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Tanks2D
 {
@@ -14,6 +15,8 @@ namespace Tanks2D
     // Спрайт, перетащенный вручную в SpriteRenderer объекта "Visual", автоматически становится «Своим спрайтом».
     //
     // Текст подписи можно править прямо в объекте "Label" или в поле «Свой текст подписи».
+    // Положение картинки/модели: поля «Смещение / Поворот / Масштаб» или просто двигайте объект Visual (Model) в сцене —
+    // ручной сдвиг запоминается в этих полях и больше не сбрасывается.
     [DisallowMultipleComponent]
     public class VisualSlot : MonoBehaviour
     {
@@ -35,14 +38,22 @@ namespace Tanks2D
         [Tooltip("Цвет-оттенок для своего арта (белый — без изменений)")]
         [SerializeField] private Color _customColor = Color.white;
 
-        [Header("Настройка модели")]
-        [Tooltip("Вписывать модель в размер объекта из каталога")]
-        [SerializeField] private bool _fitModelToSize = true;
-        [SerializeField] private float _modelScale = 1f;
-        [SerializeField] private Vector3 _modelOffset;
-        [SerializeField] private Vector3 _modelRotation;
+        [Header("Положение картинки / модели относительно объекта")]
+        [Tooltip("Вписывать картинку/модель в размер объекта из каталога")]
+        [FormerlySerializedAs("_fitModelToSize")]
+        [SerializeField] private bool _fitToSize = true;
+        [FormerlySerializedAs("_modelScale")]
+        [SerializeField] private float _scale = 1f;
+        [FormerlySerializedAs("_modelOffset")]
+        [SerializeField] private Vector3 _offset;
+        [FormerlySerializedAs("_modelRotation")]
+        [SerializeField] private Vector3 _rotation;
 
         [SerializeField, HideInInspector] private GameObject _modelSource;
+        [SerializeField, HideInInspector] private string _lastTargetName;
+        [SerializeField, HideInInspector] private Vector3 _lastPosition;
+        [SerializeField, HideInInspector] private Quaternion _lastRotation = Quaternion.identity;
+        [SerializeField, HideInInspector] private Vector3 _lastScale = Vector3.one;
         [SerializeField, HideInInspector] private string _lastWrittenLabel;
         [SerializeField, HideInInspector] private Sprite _lastAppliedSprite;
 
@@ -55,6 +66,33 @@ namespace Tanks2D
         public SpriteRenderer Renderer => _renderer;
         public Vector2 Size { get; private set; } = Vector2.one;
         public string CurrentSource { get; private set; } = "";
+
+        // Объект с картинкой: Model, если подставлена модель, иначе Visual. На нём же играют Animation Clip-ы.
+        public Transform ArtRoot
+        {
+            get
+            {
+                Transform model = transform.Find(ModelChildName);
+                return model != null ? model : transform.Find(VisualChildName);
+            }
+        }
+
+        // Реальные границы видимой картинки в мире (с учётом сдвига, поворота и масштаба)
+        public bool TryGetWorldBounds(out Bounds bounds)
+        {
+            bounds = default;
+            Transform root = ArtRoot;
+            if (root == null) return false;
+
+            bool found = false;
+            foreach (Renderer r in root.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled || r is ParticleSystemRenderer) continue;
+                if (!found) { bounds = r.bounds; found = true; }
+                else bounds.Encapsulate(r.bounds);
+            }
+            return found;
+        }
 
         // Аниматор есть только если назначен контроллер (в каталоге или внутри модели)
         public Animator Animator => _animator != null && _animator.runtimeAnimatorController != null ? _animator : null;
@@ -139,28 +177,57 @@ namespace Tanks2D
 
         private void FitSprite(Transform body, Vector2 size, bool keepAspect)
         {
-            body.localPosition = Vector3.zero;
-            body.localRotation = Quaternion.identity;
+            AdoptManualTransform(body);
 
+            float scaleX = 1f;
+            float scaleY = 1f;
             Vector2 spriteSize = _bodyRenderer.sprite != null ? (Vector2)_bodyRenderer.sprite.bounds.size : Vector2.one;
-            if (spriteSize.x <= 0f || spriteSize.y <= 0f)
+
+            if ((_fitToSize || !keepAspect) && spriteSize.x > 0f && spriteSize.y > 0f)
             {
-                body.localScale = Vector3.one;
-                return;
+                scaleX = size.x / spriteSize.x;
+                scaleY = size.y / spriteSize.y;
+
+                // Арт вписывается с сохранением пропорций, заглушка растягивается точно в размер
+                if (keepAspect)
+                {
+                    float uniform = Mathf.Min(scaleX, scaleY);
+                    scaleX = uniform;
+                    scaleY = uniform;
+                }
             }
 
-            float scaleX = size.x / spriteSize.x;
-            float scaleY = size.y / spriteSize.y;
+            body.localPosition = _offset;
+            body.localRotation = Quaternion.Euler(_rotation);
+            body.localScale = new Vector3(scaleX * _scale, scaleY * _scale, 1f);
+            RememberTransform(body);
+        }
 
-            // Арт вписывается с сохранением пропорций, заглушка растягивается точно в размер
-            if (keepAspect)
+        // Объект Visual/Model сдвинули, повернули или масштабировали руками — переносим это в поля
+        private void AdoptManualTransform(Transform target)
+        {
+            if (_lastTargetName != target.name) return;
+
+            Vector3 positionDelta = target.localPosition - _lastPosition;
+            if (positionDelta.sqrMagnitude > 0.000001f) _offset += positionDelta;
+
+            if (Quaternion.Angle(target.localRotation, _lastRotation) > 0.01f)
             {
-                float uniform = Mathf.Min(scaleX, scaleY);
-                scaleX = uniform;
-                scaleY = uniform;
+                _rotation = (target.localRotation * Quaternion.Inverse(_lastRotation) * Quaternion.Euler(_rotation)).eulerAngles;
             }
 
-            body.localScale = new Vector3(scaleX, scaleY, 1f);
+            if (Mathf.Abs(_lastScale.x) > 0.0001f && Mathf.Abs(target.localScale.x - _lastScale.x) > 0.0001f)
+            {
+                _scale *= target.localScale.x / _lastScale.x;
+            }
+        }
+
+        private void RememberTransform(Transform target)
+        {
+            _lastTargetName = target.name;
+            _lastPosition = target.localPosition;
+            _lastRotation = target.localRotation;
+            _lastScale = target.localScale;
         }
 
         // ---------------------------------------------------------------- Модель
@@ -180,6 +247,7 @@ namespace Tanks2D
             {
                 GameObject instance = Instantiate(prefab, transform);
                 instance.name = ModelChildName;
+                _lastTargetName = null;
                 model = instance.transform;
                 _modelSource = prefab;
 
@@ -195,21 +263,24 @@ namespace Tanks2D
 
         private void FitModel(Transform model, Vector2 size)
         {
-            model.localRotation = Quaternion.Euler(_modelRotation);
+            AdoptManualTransform(model);
+
+            model.localRotation = Quaternion.Euler(_rotation);
             model.localScale = Vector3.one;
             model.localPosition = Vector3.zero;
 
-            float scale = _modelScale;
+            float scale = _scale;
             Vector3 centerOffset = Vector3.zero;
 
-            if (_fitModelToSize && TryGetLocalBounds(model, out Bounds bounds) && bounds.size.x > 0.0001f && bounds.size.y > 0.0001f)
+            if (_fitToSize && TryGetLocalBounds(model, out Bounds bounds) && bounds.size.x > 0.0001f && bounds.size.y > 0.0001f)
             {
                 scale *= Mathf.Min(size.x / bounds.size.x, size.y / bounds.size.y);
                 centerOffset = -bounds.center * scale;
             }
 
             model.localScale = Vector3.one * scale;
-            model.localPosition = centerOffset + _modelOffset;
+            model.localPosition = centerOffset + _offset;
+            RememberTransform(model);
         }
 
         // Габариты модели в локальных координатах этого объекта (при масштабе модели 1)

@@ -36,6 +36,10 @@ namespace Tanks2D.EditorTools
         private static bool _retreatSeen;
         private static int _missionBeforeBossKill;
         private static float _bossSpawnGameTime;
+        private static CharacterAnimations _animProbe;
+        private static Sprite[] _animSprites;
+        private static float _animStartGameTime;
+        private static CharacterAnimations _clipProbe;
 
         static VerticalSmokeTest()
         {
@@ -184,6 +188,16 @@ namespace Tanks2D.EditorTools
                     _probeStartDirectionX = _probeBullet != null ? _probeBullet.transform.up.x : 0f;
                     _probeStartVelocity = _probeBullet != null ? _probeBullet.Velocity : Vector2.zero;
                     _probeStartGameTime = Time.time;
+                    StartAnimationProbe();
+
+                    // Башни встали в слоты-объекты сцены
+                    TowerManager towerManager = Object.FindAnyObjectByType<TowerManager>();
+                    bool towersOnSlots = towerManager != null && towerManager.Towers.Count == GameStats.TowerCount;
+                    for (int i = 0; towersOnSlots && i < towerManager.Towers.Count; i++)
+                    {
+                        towersOnSlots = Vector2.Distance(towerManager.Towers[i].transform.position, towerManager.GetSlotPosition(i)) < 0.01f;
+                    }
+                    Check(towersOnSlots && GameObject.Find("Slot_1") != null, $"Башни стоят в слотах Slot_1..{towerManager?.Towers.Count}");
                     // Пробная пуля не должна исчезнуть, попав во врага по пути к борту
                     if (_probeBullet != null) SetField(_probeBullet, "_hasHit", true);
                     NextStep();
@@ -200,6 +214,7 @@ namespace Tanks2D.EditorTools
                     Check(Mathf.Abs(Mathf.Abs(after.x) - Mathf.Abs(_probeStartVelocity.x)) < 0.05f && Mathf.Abs(after.y - _probeStartVelocity.y) < 0.05f,
                         "Отражение по физике: угол падения = углу отражения, без самонаведения");
                     Check(Mathf.Abs(after.magnitude - _probeStartVelocity.magnitude) < 0.05f, "Скорость после отскока не теряется");
+                    CheckAnimationProbe();
                     NextStep();
                     break;
                 }
@@ -242,6 +257,12 @@ namespace Tanks2D.EditorTools
                     bool alive = _probeEnemy != null && !_probeEnemy.IsDying;
                     Check(!alive || _probeEnemy.transform.position.y > _probeEnemyY, "Ветер: враг отброшен вверх");
                     Check(!alive || _probeEnemy.CurrentHP < _probeEnemy.MaxHP, "Огонь: горение наносит урон");
+                    if (_animProbe != null)
+                    {
+                        Check(_animProbe.Current == CharacterAnimation.Death && _animProbe.GetComponent<VisualSlot>().Renderer.sprite == _animSprites[5],
+                            "Анимация смерти доиграла и замерла на последнем кадре");
+                        Object.Destroy(_animProbe.gameObject);
+                    }
 
                     // Удвоение потока и лимит на экране
                     EnemySpawner2D spawner = EnemySpawner2D.Instance;
@@ -267,6 +288,16 @@ namespace Tanks2D.EditorTools
                     SetField(spawner, "_spawnRate", 1000f);
                     foreach (PigEnemy enemy in new List<PigEnemy>(PigEnemy.Alive)) Object.Destroy(enemy.gameObject);
 
+                    bool onSpawnLine = true;
+                    foreach (PigEnemy enemy in PigEnemy.Alive)
+                    {
+                        if (Mathf.Abs(enemy.transform.position.x - spawner.transform.position.x) > 3.81f) onSpawnLine = false;
+                    }
+                    Check(onSpawnLine, "Враги появляются в пределах линии спавна");
+
+                    Transform bossPoint = spawner.transform.Find("BossSpawnPoint");
+                    if (bossPoint != null) bossPoint.position = new Vector3(2f, bossPoint.position.y, 0f);
+
                     GameStats.Mission = 2;
                     // Стена с большим запасом: проверяем способности босса, а не баланс
                     GameStats.WallMaxHP = 100000;
@@ -275,6 +306,8 @@ namespace Tanks2D.EditorTools
                     _boss = null;
                     foreach (BossAbilities abilities in Object.FindObjectsByType<BossAbilities>()) _boss = abilities.GetComponent<PigEnemy>();
                     Check(_boss != null && _boss.GetComponent<BossAbilities>().Level == 2, "Босс ур. 2 появился");
+                    Check(_boss != null && Mathf.Abs(_boss.transform.position.x - 2f) < 0.01f, $"Босс появился в точке BossSpawnPoint (x = {_boss?.transform.position.x:0.00})");
+                    Check(_boss != null && _boss.GetComponent<CharacterAnimations>() != null, "У босса есть компонент анимаций");
 
                     // Ставим босса прямо над стеной, чтобы не ждать его подхода
                     if (_boss != null) _boss.transform.position = new Vector3(0f, Wall.ActiveInstance.TopY + 1.25f, 0f);
@@ -346,6 +379,79 @@ namespace Tanks2D.EditorTools
             }
         }
 
+        // ---------------------------------------------------------------- Анимации
+
+        private static void StartAnimationProbe()
+        {
+            _animSprites = new Sprite[6];
+            for (int i = 0; i < _animSprites.Length; i++)
+            {
+                _animSprites[i] = Sprite.Create(new Texture2D(8, 8), new Rect(0, 0, 8, 8), new Vector2(0.5f, 0.5f), 8);
+                _animSprites[i].name = $"Frame{i}";
+            }
+
+            var go = new GameObject("TestAnimations");
+            go.transform.position = new Vector3(0f, 20f, 0f);
+            go.AddComponent<VisualSlot>().Configure(VisualId.Player, 0, false);
+            _animProbe = go.AddComponent<CharacterAnimations>();
+
+            SetSlot("_idle", new[] { _animSprites[0], _animSprites[1] });
+            SetSlot("_attack", new[] { _animSprites[2], _animSprites[3] });
+            SetSlot("_death", new[] { _animSprites[4], _animSprites[5] });
+
+            // Animation Clip на отдельном объекте: меняет кадры спрайта (как клип, записанный художником)
+            var clipGo = new GameObject("TestClip");
+            clipGo.transform.position = new Vector3(0f, 25f, 0f);
+            clipGo.AddComponent<VisualSlot>().Configure(VisualId.Player, 0, false);
+            _clipProbe = clipGo.AddComponent<CharacterAnimations>();
+            var clip = new AnimationClip { legacy = false, frameRate = 10f };
+            AnimationUtility.SetObjectReferenceCurve(clip, EditorCurveBinding.PPtrCurve("", typeof(SpriteRenderer), "m_Sprite"), new[]
+            {
+                new ObjectReferenceKeyframe { time = 0f, value = _animSprites[0] },
+                new ObjectReferenceKeyframe { time = 0.3f, value = _animSprites[3] },
+                new ObjectReferenceKeyframe { time = 1f, value = _animSprites[3] }
+            });
+            ((AnimationSlot)GetField(_clipProbe, "_special")).clip = clip;
+            _clipProbe.Play(CharacterAnimation.Special);
+
+            float attack = _animProbe.Play(CharacterAnimation.Attack);
+            Check(Mathf.Abs(attack - 0.2f) < 0.001f && _animProbe.GetComponent<VisualSlot>().Renderer.sprite == _animSprites[2],
+                "Анимация атаки из кадров запускается");
+            _animStartGameTime = Time.time;
+        }
+
+        private static void CheckAnimationProbe()
+        {
+            if (_animProbe == null) return;
+
+            Sprite sprite = _animProbe.GetComponent<VisualSlot>().Renderer.sprite;
+            Check(_animProbe.Current == CharacterAnimation.Idle && (sprite == _animSprites[0] || sprite == _animSprites[1]),
+                $"После атаки вернулась анимация «Стоит» (кадр {sprite?.name}, прошло {Time.time - _animStartGameTime:0.00} с)");
+
+            if (_clipProbe != null)
+            {
+                Sprite clipSprite = _clipProbe.GetComponent<VisualSlot>().Renderer.sprite;
+                Check(clipSprite == _animSprites[3], $"Animation Clip проигрывается на объекте картинки (кадр {clipSprite?.name})");
+                Object.Destroy(_clipProbe.gameObject);
+            }
+
+            // Смерть: в шаге 5 проверим, что замерла на последнем кадре
+            _animProbe.Play(CharacterAnimation.Death);
+            Check(_animProbe.Play(CharacterAnimation.Attack) == 0f, "После смерти другие анимации не запускаются");
+        }
+
+        private static void SetSlot(string field, Sprite[] frames)
+        {
+            var slot = (AnimationSlot)GetField(_animProbe, field);
+            slot.frames = frames;
+            slot.framesPerSecond = 10f;
+        }
+
+        private static object GetField(object target, string field)
+        {
+            return target.GetType().GetField(field, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(target);
+        }
+
         // ---------------------------------------------------------------- Замена оформления
 
         private static void CheckVisualOverrides()
@@ -393,6 +499,17 @@ namespace Tanks2D.EditorTools
             Check(text != null && text.gameObject.activeSelf && text.text == "МОЙ ТЕКСТ", "Свой текст подписи виден поверх модели");
             Object.Destroy(go);
             Object.Destroy(modelTemplate);
+
+            // Ручной сдвиг картинки (объект Visual) не сбрасывается и запоминается в поле «Смещение»
+            go = new GameObject("TestSlotOffset");
+            slot = go.AddComponent<VisualSlot>();
+            slot.Configure(VisualId.EnemyPig, 10);
+            go.transform.Find("Visual").localPosition = new Vector3(0f, 0.5f, 0f);
+            slot.Apply();
+            slot.Apply();
+            Check(Vector3.Distance(go.transform.Find("Visual").localPosition, new Vector3(0f, 0.5f, 0f)) < 0.001f,
+                $"Ручной сдвиг картинки сохраняется ({go.transform.Find("Visual").localPosition})");
+            Object.Destroy(go);
 
             // UI-иконка переключается между id и не залипает на прошлой картинке
             var iconGo = new GameObject("TestIcon", typeof(RectTransform), typeof(UnityEngine.UI.Image));

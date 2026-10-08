@@ -13,6 +13,8 @@ namespace Tanks2D
         [SerializeField] private Transform _turret;
         [SerializeField] private Transform _firePoint;
         [SerializeField] private GameObject _bulletPrefab;
+        [Tooltip("Анимации героя: Idle, Attack (выстрел), Special (перезарядка). Пусто — берутся с этого же объекта")]
+        [SerializeField] private CharacterAnimations _animations;
 
         [Header("Weapon Settings (Настройки оружия)")]
         [SerializeField] private float _bulletSpeed = 14f;
@@ -45,6 +47,7 @@ namespace Tanks2D
             _mainCamera = Camera.main;
             _currentAmmo = GameStats.MaxAmmo;
             if (_turret == null) _turret = transform;
+            if (_animations == null) _animations = GetComponent<CharacterAnimations>();
         }
 
         private void Update()
@@ -130,12 +133,14 @@ namespace Tanks2D
         {
             _isReloading = true;
             _reloadEndTime = Time.time + GameStats.ReloadTime;
+            if (_animations != null) _animations.Play(CharacterAnimation.Special);
         }
 
         // Залп: GameStats.BulletCount пуль веером шириной GameStats.SpreadAngle (тратит один патрон)
         private void Shoot()
         {
             if (_bulletPrefab == null || _firePoint == null) return;
+            if (_animations != null) _animations.Play(CharacterAnimation.Attack);
 
             Vector3 position = _firePoint.position;
             position.z = 0f;

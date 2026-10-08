@@ -51,6 +51,21 @@ MonoBehaviour:
   _id: 4
   _sortingOrder: 30
   _showLabel: 0
+  _customSprite: {fileID: 0}
+  _customPrefab: {fileID: 0}
+  _customLabel: 
+  _customColor: {r: 1, g: 1, b: 1, a: 1}
+  _fitToSize: 1
+  _scale: 1
+  _offset: {x: 0, y: 0, z: 0}
+  _rotation: {x: 0, y: 0, z: 0}
+  _modelSource: {fileID: 0}
+  _lastTargetName: Visual
+  _lastPosition: {x: 0, y: 0, z: 0}
+  _lastRotation: {x: 0, y: 0, z: 0, w: 1}
+  _lastScale: {x: 0.22, y: 0.22, z: 1}
+  _lastWrittenLabel: 
+  _lastAppliedSprite: {fileID: 21300000, guid: 8092b6516400e5e498472f53de6afcda, type: 3}
 --- !u!50 &5514695970982532261
 Rigidbody2D:
   serializedVersion: 5

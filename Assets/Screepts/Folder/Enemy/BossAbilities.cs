@@ -82,7 +82,13 @@ namespace Tanks2D
 
         private void SetShield(bool active)
         {
+            bool turnedOn = active && !_shieldActive;
             _shieldActive = active;
+            if (turnedOn)
+            {
+                CharacterAnimations animations = GetComponent<CharacterAnimations>();
+                if (animations != null) animations.Play(CharacterAnimation.Special);
+            }
             if (_enemy != null) _enemy.DamageTakenMultiplier = active ? _shieldDamageMultiplier : 1f;
             if (_shieldVisual != null) _shieldVisual.SetActive(active);
         }

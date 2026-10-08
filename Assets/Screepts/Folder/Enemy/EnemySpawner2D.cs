@@ -31,13 +31,19 @@ namespace Tanks2D
         [SerializeField] private int _maxAliveEnemies = 50;
         [Tooltip("Продолжать спавн обычных врагов, пока жив босс")]
         [SerializeField] private bool _spawnDuringBoss = true;
-        [Tooltip("Отступ от боковых краёв поля")]
+        [Tooltip("Ширина линии появления врагов (по центру объекта спавнера). 0 — вся ширина поля")]
+        [SerializeField] private float _spawnWidth = 7.6f;
+        [Tooltip("Отступ от боковых краёв поля (если ширина линии = 0)")]
         [SerializeField] private float _horizontalMargin = 0.7f;
+        [Tooltip("Всегда появляться за верхним краем экрана, даже если спавнер стоит ниже (на длинных телефонах экран выше поля)")]
+        [SerializeField] private bool _alwaysAboveScreen = true;
         [Tooltip("На сколько выше верхнего края экрана появляются враги")]
         [SerializeField] private float _spawnAboveScreen = 1f;
 
         [Header("Boss Settings (Настройки Босса)")]
         [SerializeField] private GameObject bossPrefab;
+        [Tooltip("Где появляется босс. Пусто — по центру линии спавна")]
+        [SerializeField] private Transform _bossSpawnPoint;
         [Tooltip("Сколько обычных врагов нужно убить, чтобы пришел Босс")]
         [SerializeField] private int killsNeededForBoss = 10;
 
@@ -144,7 +150,7 @@ namespace Tanks2D
             EnemySpawnConfig selectedConfig = GetRandomEnemyConfig();
             if (selectedConfig == null || selectedConfig.enemyPrefab == null) return;
 
-            Spawn(selectedConfig.enemyPrefab, GetRandomSpawnX(), false);
+            Spawn(selectedConfig.enemyPrefab, new Vector3(GetRandomSpawnX(), GetSpawnY(transform.position.y), 0f), false);
         }
 
         private void SpawnBoss()
@@ -159,8 +165,8 @@ namespace Tanks2D
             Debug.Log($"[Spawner] ВНИМАНИЕ! ПОЯВИЛСЯ БОСС ур. {BossLevel}!");
             PlayMusic(bossMusic);
 
-            float centerX = PlayField.Instance != null ? PlayField.Instance.Center.x : transform.position.x;
-            GameObject boss = Spawn(bossPrefab, centerX, true);
+            Vector3 point = _bossSpawnPoint != null ? _bossSpawnPoint.position : transform.position;
+            GameObject boss = Spawn(bossPrefab, new Vector3(point.x, GetSpawnY(point.y), 0f), true);
 
             BossAbilities abilities = boss.GetComponent<BossAbilities>();
             if (abilities != null) abilities.Setup(BossLevel);
@@ -169,9 +175,8 @@ namespace Tanks2D
             if (_dialoguePanel != null && _bossIntroDialogue.Count > 0) _dialoguePanel.Play(_bossIntroDialogue, null);
         }
 
-        private GameObject Spawn(GameObject prefab, float x, bool isBoss)
+        private GameObject Spawn(GameObject prefab, Vector3 position, bool isBoss)
         {
-            var position = new Vector3(x, GetSpawnY(), 0f);
             GameObject enemyGo = Instantiate(prefab, position, Quaternion.identity);
 
             PigEnemy enemy = enemyGo.GetComponent<PigEnemy>();
@@ -186,6 +191,12 @@ namespace Tanks2D
 
         private float GetRandomSpawnX()
         {
+            if (_spawnWidth > 0f)
+            {
+                float half = _spawnWidth * 0.5f;
+                return transform.position.x + Random.Range(-half, half);
+            }
+
             PlayField field = PlayField.Instance;
             if (field == null) return transform.position.x;
 
@@ -194,10 +205,10 @@ namespace Tanks2D
             return min < max ? Random.Range(min, max) : field.Center.x;
         }
 
-        // Чуть выше видимой части экрана (на длинных телефонах она выше верхнего края поля)
-        private float GetSpawnY()
+        // Высота появления: как стоит спавнер (или точка босса); при _alwaysAboveScreen — не ниже верхнего края экрана
+        private float GetSpawnY(float y)
         {
-            float y = transform.position.y;
+            if (!_alwaysAboveScreen) return y;
 
             Camera cam = Camera.main;
             if (cam != null && cam.orthographic)
@@ -206,6 +217,28 @@ namespace Tanks2D
             }
 
             return y;
+        }
+
+        // Линия появления врагов и точка босса видны в окне Scene
+        private void OnDrawGizmos()
+        {
+            Vector3 p = transform.position;
+            float half = _spawnWidth > 0f ? _spawnWidth * 0.5f : 4.5f;
+
+            Gizmos.color = new Color(1f, 0.4f, 0.4f);
+            Gizmos.DrawLine(p + Vector3.left * half, p + Vector3.right * half);
+            Gizmos.DrawLine(p + Vector3.left * half + Vector3.down * 0.3f, p + Vector3.left * half + Vector3.up * 0.3f);
+            Gizmos.DrawLine(p + Vector3.right * half + Vector3.down * 0.3f, p + Vector3.right * half + Vector3.up * 0.3f);
+
+            if (_bossSpawnPoint != null)
+            {
+                Gizmos.color = new Color(1f, 0.2f, 0.3f);
+                Gizmos.DrawWireSphere(_bossSpawnPoint.position, 1.2f);
+            }
+#if UNITY_EDITOR
+            UnityEditor.Handles.Label(p + new Vector3(-half, 0.5f, 0f), "Появление врагов");
+            if (_bossSpawnPoint != null) UnityEditor.Handles.Label(_bossSpawnPoint.position + new Vector3(-0.4f, 1.5f, 0f), "Босс");
+#endif
         }
 
         private void PlayMusic(AudioClip clip)

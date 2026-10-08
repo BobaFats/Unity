@@ -18,11 +18,15 @@ namespace Tanks2D
         [Tooltip("Дальность стрельбы в мировых единицах")]
         [SerializeField] private float _range = 20f;
 
+        [Tooltip("Анимации башни: Idle, Attack (выстрел). Пусто — берутся с этого же объекта")]
+        [SerializeField] private CharacterAnimations _animations;
+
         private float _nextFireTime;
 
         private void Start()
         {
             if (_turret == null) _turret = transform;
+            if (_animations == null) _animations = GetComponent<CharacterAnimations>();
             // Разносим первые выстрелы, чтобы башни не стреляли синхронно
             _nextFireTime = Time.time + Random.Range(0f, _fireDelay);
         }
@@ -47,6 +51,7 @@ namespace Tanks2D
 
             int damage = Mathf.Max(1, Mathf.RoundToInt(GameStats.BulletDamage * _damageMultiplier));
             PlayerController2D.SpawnBullet(_bulletPrefab, position, _turret.rotation, _bulletSpeed, damage);
+            if (_animations != null) _animations.Play(CharacterAnimation.Attack);
             _nextFireTime = Time.time + _fireDelay;
         }
     }

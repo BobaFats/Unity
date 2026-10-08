@@ -10,6 +10,8 @@ namespace Tanks2D
     {
         [Header("Visual")]
         [SerializeField] private VisualSlot _visual;
+        [Tooltip("Анимации стены: Idle, Hit (удар), Death (разрушена). Пусто — берутся с этого же объекта")]
+        [SerializeField] private CharacterAnimations _animations;
 
         [Header("UI Elements & Colors")]
         [SerializeField] private Slider wallHPSlider;
@@ -34,8 +36,40 @@ namespace Tanks2D
         public static Wall ActiveInstance { get; private set; }
         public static bool IsGameOver { get; private set; }
 
-        public float TopY => transform.position.y + (_visual != null ? _visual.Size.y * 0.5f : 0.3f);
-        public float HalfWidth => _visual != null ? _visual.Size.x * 0.5f : 4.5f;
+        // Верх и ширина берутся по реальной картинке (с учётом её сдвига/масштаба), если она есть
+        private float _topOffset = float.NaN;
+        private float _halfWidth = float.NaN;
+
+        public float TopY
+        {
+            get
+            {
+                if (float.IsNaN(_topOffset)) MeasureVisual();
+                return transform.position.y + _topOffset;
+            }
+        }
+
+        public float HalfWidth
+        {
+            get
+            {
+                if (float.IsNaN(_halfWidth)) MeasureVisual();
+                return _halfWidth;
+            }
+        }
+
+        private void MeasureVisual()
+        {
+            if (_visual != null && _visual.TryGetWorldBounds(out Bounds bounds))
+            {
+                _topOffset = bounds.max.y - transform.position.y;
+                _halfWidth = bounds.extents.x;
+                return;
+            }
+
+            _topOffset = _visual != null ? _visual.Size.y * 0.5f * transform.lossyScale.y : 0.3f;
+            _halfWidth = _visual != null ? _visual.Size.x * 0.5f * transform.lossyScale.x : 4.5f;
+        }
 
         private void Awake()
         {
@@ -56,6 +90,8 @@ namespace Tanks2D
 
         private void Start()
         {
+            if (_animations == null) _animations = GetComponent<CharacterAnimations>();
+
             _currentHP = GameStats.WallMaxHP;
             _visualHP = _currentHP;
 
@@ -105,6 +141,7 @@ namespace Tanks2D
             UpdateHPText();
 
             if (_currentHP <= 0) TriggerGameOver();
+            else if (_animations != null) _animations.Play(CharacterAnimation.Hit);
         }
 
         // Вызывается из магазина при покупке улучшения стены: растим максимум и полностью чиним
@@ -142,6 +179,7 @@ namespace Tanks2D
             IsGameOver = true;
 
             if (gameOverPanel != null) gameOverPanel.SetActive(true);
+            if (_animations != null) _animations.Play(CharacterAnimation.Death);
             GamePause.Set(this, true);
         }
 

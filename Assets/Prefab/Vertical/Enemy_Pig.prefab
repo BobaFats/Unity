@@ -105,6 +105,7 @@ GameObject:
   - component: {fileID: 6965014737719160780}
   - component: {fileID: 7545129598229074150}
   - component: {fileID: 7752794499669493044}
+  - component: {fileID: 4905026758521704712}
   m_Layer: 0
   m_Name: Enemy_Pig
   m_TagString: Untagged
@@ -145,6 +146,21 @@ MonoBehaviour:
   _id: 5
   _sortingOrder: 10
   _showLabel: 1
+  _customSprite: {fileID: 0}
+  _customPrefab: {fileID: 0}
+  _customLabel: 
+  _customColor: {r: 1, g: 1, b: 1, a: 1}
+  _fitToSize: 1
+  _scale: 1
+  _offset: {x: 0, y: 0, z: 0}
+  _rotation: {x: 0, y: 0, z: 0}
+  _modelSource: {fileID: 0}
+  _lastTargetName: Visual
+  _lastPosition: {x: 0, y: 0, z: 0}
+  _lastRotation: {x: 0, y: 0, z: 0, w: 1}
+  _lastScale: {x: 0.9, y: 0.9, z: 1}
+  _lastWrittenLabel: "\u0421\u0412\u0418\u041D"
+  _lastAppliedSprite: {fileID: 21300000, guid: e98b6a1153379134db80fcb5769ffaea, type: 3}
 --- !u!61 &6965014737719160780
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -240,12 +256,51 @@ MonoBehaviour:
   xpReward: 1
   visual: {fileID: 253141067186549727}
   healthBar: {fileID: 9097670946590849983}
+  animations: {fileID: 4905026758521704712}
   damageTextPrefab: {fileID: 7739126329345863156, guid: 2b73c03676c09bb4483dca2be67c5cdd, type: 3}
   hitFlashColor: {r: 1, g: 1, b: 1, a: 1}
   hitFlashDuration: 0.08
   deathFadeDuration: 0.35
   slowTint: {r: 0.55, g: 0.85, b: 1, a: 1}
   burnTint: {r: 1, g: 0.55, b: 0.2, a: 1}
+--- !u!114 &4905026758521704712
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2348203679991251203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9af4c93797c57d44b209750423abfa6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.CharacterAnimations
+  _visual: {fileID: 253141067186549727}
+  _speed: 1
+  _idle:
+    clip: {fileID: 0}
+    frames: []
+    framesPerSecond: 12
+  _move:
+    clip: {fileID: 0}
+    frames: []
+    framesPerSecond: 12
+  _attack:
+    clip: {fileID: 0}
+    frames: []
+    framesPerSecond: 12
+  _hit:
+    clip: {fileID: 0}
+    frames: []
+    framesPerSecond: 12
+  _death:
+    clip: {fileID: 0}
+    frames: []
+    framesPerSecond: 12
+  _special:
+    clip: {fileID: 0}
+    frames: []
+    framesPerSecond: 12
 --- !u!1 &3329317774144116255
 GameObject:
   m_ObjectHideFlags: 0

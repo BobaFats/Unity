@@ -31,6 +31,8 @@ public class PigEnemy : MonoBehaviour
     [Header("UI & Visuals")]
     [SerializeField] private Tanks2D.VisualSlot visual;
     [SerializeField] private Tanks2D.EnemyHealthBar2D healthBar;
+    [Tooltip("Анимации (Idle, Move, Attack, Hit, Death). Пусто — берутся с этого же объекта")]
+    [SerializeField] private Tanks2D.CharacterAnimations animations;
     [SerializeField] private GameObject damageTextPrefab;
 
     [Header("Hit Feedback")]
@@ -77,7 +79,23 @@ public class PigEnemy : MonoBehaviour
     public bool IsBurning => Time.time < _burnUntil;
     public float CurrentSpeed => speed * (IsSlowed ? 1f - _slowFactor : 1f);
 
-    private float HalfHeight => visual != null ? visual.Size.y * 0.5f : 0.5f;
+    // Расстояние от точки объекта до низа картинки (с учётом её ручного сдвига и масштаба)
+    private float _bottomOffset = -1f;
+
+    private float HalfHeight
+    {
+        get
+        {
+            if (_bottomOffset < 0f) _bottomOffset = MeasureBottomOffset();
+            return _bottomOffset;
+        }
+    }
+
+    private float MeasureBottomOffset()
+    {
+        if (visual != null && visual.TryGetWorldBounds(out Bounds bounds)) return Mathf.Max(0f, transform.position.y - bounds.min.y);
+        return visual != null ? visual.Size.y * 0.5f * transform.lossyScale.y : 0.5f;
+    }
     private Animator CurrentAnimator => visual != null ? visual.Animator : null;
 
     public static PigEnemy FindNearest(Vector2 position)
@@ -119,8 +137,24 @@ public class PigEnemy : MonoBehaviour
         _healthMultiplier = Mathf.Max(0.1f, healthMultiplier);
     }
 
+    // Разовая анимация: сначала из CharacterAnimations, иначе — триггер Animator Controller (если есть)
+    private void PlayAnimation(Tanks2D.CharacterAnimation animation, string animatorTrigger)
+    {
+        if (animations != null && animations.Play(animation) > 0f) return;
+
+        Animator animator = CurrentAnimator;
+        if (animator != null && !string.IsNullOrEmpty(animatorTrigger)) animator.SetTrigger(animatorTrigger);
+    }
+
+    private void SetBaseAnimation(Tanks2D.CharacterAnimation animation)
+    {
+        if (animations != null) animations.SetBase(animation);
+    }
+
     private void Start()
     {
+        if (animations == null) animations = GetComponent<Tanks2D.CharacterAnimations>();
+        SetBaseAnimation(Tanks2D.CharacterAnimation.Move);
         maxHP = Mathf.Max(1, Mathf.RoundToInt(maxHP * _healthMultiplier));
         currentHP = maxHP;
         if (visual != null && visual.Renderer != null) _baseColor = visual.Renderer.color;
@@ -144,10 +178,15 @@ public class PigEnemy : MonoBehaviour
             return;
         }
 
-        if (MovementLocked) return;
+        if (MovementLocked)
+        {
+            SetBaseAnimation(Tanks2D.CharacterAnimation.Move);
+            return;
+        }
 
         if (_targetWall == null)
         {
+            SetBaseAnimation(Tanks2D.CharacterAnimation.Move);
             MoveDown(float.NegativeInfinity);
             return;
         }
@@ -156,12 +195,18 @@ public class PigEnemy : MonoBehaviour
 
         if (transform.position.y > stopY)
         {
+            SetBaseAnimation(Tanks2D.CharacterAnimation.Move);
             MoveDown(stopY);
         }
-        else if (Time.time >= _nextAttackTime)
+        else
         {
-            Animator animator = CurrentAnimator;
-            if (animator != null) animator.SetTrigger("Attack");
+            SetBaseAnimation(Tanks2D.CharacterAnimation.Idle);
+        }
+
+        if (transform.position.y <= stopY && Time.time >= _nextAttackTime)
+        {
+            SetBaseAnimation(Tanks2D.CharacterAnimation.Idle);
+            PlayAnimation(Tanks2D.CharacterAnimation.Attack, "Attack");
 
             _targetWall.TakeDamage(Mathf.RoundToInt(attackDamage * AttackDamageMultiplier));
             _nextAttackTime = Time.time + attackRate;
@@ -192,6 +237,7 @@ public class PigEnemy : MonoBehaviour
         Color? color = shielded ? new Color(0.6f, 0.75f, 1f) : textColor;
         SpawnFloatingText(damageTextPrefab, text, color, 0f);
         _flashUntil = Time.time + hitFlashDuration;
+        if (damage > 0 && currentHP > 0) PlayAnimation(Tanks2D.CharacterAnimation.Hit, null);
 
         if (currentHP <= 0) Die();
     }
@@ -290,8 +336,14 @@ public class PigEnemy : MonoBehaviour
     private IEnumerator DeathRoutine()
     {
         Animator animator = CurrentAnimator;
+        float deathDuration = animations != null ? animations.Play(Tanks2D.CharacterAnimation.Death) : 0f;
 
-        if (animator != null)
+        if (deathDuration > 0f)
+        {
+            // Анимация смерти из инспектора: доигрываем и держим последний кадр чуть-чуть
+            yield return new WaitForSeconds(deathDuration + 0.3f);
+        }
+        else if (animator != null)
         {
             // Финальный арт с анимацией смерти
             animator.SetTrigger("Die");

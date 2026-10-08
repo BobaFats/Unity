@@ -424,6 +424,7 @@ namespace Tanks2D.EditorTools
                 ("damageTextPrefab", prefabs.DamageText),
                 ("xpReward", xpReward),
                 ("knockbackResistance", knockbackResistance));
+            Wire(enemy, ("animations", AddAnimations(go, visual)));
 
             if (isBoss)
             {
@@ -468,6 +469,7 @@ namespace Tanks2D.EditorTools
                 ("_fireDelay", 1f),
                 ("_bulletSpeed", 12f),
                 ("_damageMultiplier", 0.5f));
+            Wire(tower, ("_animations", AddAnimations(go, go.GetComponent<VisualSlot>())));
 
             return SavePrefab(go, "Tower");
         }
@@ -584,9 +586,14 @@ namespace Tanks2D.EditorTools
             music.loop = true;
             music.volume = 0.6f;
 
+            var bossPoint = new GameObject("BossSpawnPoint").transform;
+            bossPoint.SetParent(spawnerGo.transform, false);
+
             Wire(spawner,
                 ("_wall", wall),
                 ("_spawnRate", 2f),
+                ("_spawnWidth", FieldSize.x - 1.4f),
+                ("_bossSpawnPoint", bossPoint),
                 ("bossPrefab", prefabs.Boss),
                 ("killsNeededForBoss", 60),
                 ("_doublingPeriod", 60f),
@@ -617,6 +624,7 @@ namespace Tanks2D.EditorTools
             var towersGo = new GameObject("Towers");
             TowerManager towers = towersGo.AddComponent<TowerManager>();
             Wire(towers, ("_towerPrefab", prefabs.Tower), ("_wall", wall));
+            CreateTowerSlots(towers, wall, new[] { -0.4f, 0.4f, -0.8f, 0.8f, 0f });
 
             var experienceGo = new GameObject("ExperienceSystem");
             ExperienceSystem experience = experienceGo.AddComponent<ExperienceSystem>();
@@ -624,6 +632,7 @@ namespace Tanks2D.EditorTools
 
             Wire(wall,
                 ("_visual", wallVisual),
+                ("_animations", AddAnimations(wallGo, wallVisual)),
                 ("damageTextPrefab", prefabs.WallDamageText),
                 ("hpGradient", CreateHpGradient()));
 
@@ -650,6 +659,31 @@ namespace Tanks2D.EditorTools
                 collider.size = new Vector2(thickness, height);
                 collider.sharedMaterial = material;
             }
+        }
+
+        // Компонент анимаций с пустыми ячейками — художник заполняет их в инспекторе
+        private static CharacterAnimations AddAnimations(GameObject go, VisualSlot visual)
+        {
+            CharacterAnimations animations = go.AddComponent<CharacterAnimations>();
+            Wire(animations, ("_visual", visual));
+            return animations;
+        }
+
+        private static void CreateTowerSlots(TowerManager towers, Wall wall, float[] normalized)
+        {
+            var so = new SerializedObject(towers);
+            SerializedProperty points = so.FindProperty("_slotPoints");
+            points.arraySize = normalized.Length;
+
+            for (int i = 0; i < normalized.Length; i++)
+            {
+                var slot = new GameObject($"Slot_{i + 1}").transform;
+                slot.SetParent(towers.transform, false);
+                slot.position = new Vector3(wall.transform.position.x + normalized[i] * FieldSize.x * 0.5f, wall.transform.position.y, 0f);
+                points.GetArrayElementAtIndex(i).objectReferenceValue = slot;
+            }
+
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static PlayerController2D CreatePlayer(Vector3 position, GameObject bulletPrefab)
@@ -679,6 +713,7 @@ namespace Tanks2D.EditorTools
                 ("_bulletPrefab", bulletPrefab),
                 ("_bulletSpeed", 14f),
                 ("_minAimAngle", 10f));
+            Wire(controller, ("_animations", AddAnimations(playerGo, playerGo.GetComponent<VisualSlot>())));
 
             return controller;
         }
