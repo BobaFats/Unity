@@ -12,7 +12,7 @@ namespace Tanks2D
 
         private void Update()
         {
-            if (_missionText != null) _missionText.text = $"Миссия {GameStats.Mission}";
+            if (_missionText != null) _missionText.text = $"Уровень {GameStats.Mission} / {GameStats.TotalLevels}";
 
             EnemySpawner2D spawner = EnemySpawner2D.Instance;
             if (_text == null || spawner == null) return;

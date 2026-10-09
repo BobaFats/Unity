@@ -6,6 +6,8 @@ using UnityEngine.Serialization;
 namespace Tanks2D
 {
     // Спавнит врагов над верхним краем экрана в случайной точке по ширине поля.
+    // Настройки текущего уровня кампании (LevelCatalog: враги, босс, его способности, мини-боссы, реплики)
+    // важнее настроек в инспекторе; пустые поля уровня — берётся то, что задано здесь.
     public class EnemySpawner2D : MonoBehaviour
     {
         [System.Serializable]
@@ -21,16 +23,24 @@ namespace Tanks2D
         [SerializeField] private Wall _wall;
 
         [Header("Spawn Settings (Настройки появления)")]
-        [Tooltip("Интервал появления врагов в первую минуту, сек.")]
-        [SerializeField] private float _spawnRate = 2f;
+        [Tooltip("Интервал между группами врагов в первую минуту, сек.")]
+        [SerializeField] private float _spawnRate = 1.5f;
+        [Tooltip("Сколько врагов в одной группе (мин–макс)")]
+        [SerializeField] private Vector2Int _groupSize = new Vector2Int(3, 6);
+        [Tooltip("Разброс врагов группы по X вокруг её центра")]
+        [SerializeField] private float _groupSpread = 1.3f;
+        [Tooltip("Разброс по высоте внутри группы (идут не строем, а толпой)")]
+        [SerializeField] private float _groupDepth = 1.5f;
         [Tooltip("Каждые столько секунд поток врагов удваивается")]
         [SerializeField] private float _doublingPeriod = 60f;
         [Tooltip("Предел удвоений (6 -> не более x64)")]
         [SerializeField] private int _maxDoublings = 6;
         [Tooltip("Максимум живых врагов на экране одновременно")]
-        [SerializeField] private int _maxAliveEnemies = 50;
+        [SerializeField] private int _maxAliveEnemies = 80;
         [Tooltip("Продолжать спавн обычных врагов, пока жив босс")]
-        [SerializeField] private bool _spawnDuringBoss = true;
+        [SerializeField] private bool _spawnDuringBoss = false;
+        [Tooltip("Когда появляется босс, все обычные враги и мини-боссы исчезают (без опыта)")]
+        [SerializeField] private bool _clearEnemiesOnBoss = true;
         [Tooltip("Ширина линии появления врагов (по центру объекта спавнера). 0 — вся ширина поля")]
         [SerializeField] private float _spawnWidth = 7.6f;
         [Tooltip("Отступ от боковых краёв поля (если ширина линии = 0)")]
@@ -44,7 +54,7 @@ namespace Tanks2D
         [SerializeField] private GameObject bossPrefab;
         [Tooltip("Где появляется босс. Пусто — по центру линии спавна")]
         [SerializeField] private Transform _bossSpawnPoint;
-        [Tooltip("Сколько обычных врагов нужно убить, чтобы пришел Босс")]
+        [Tooltip("Сколько обычных врагов нужно убить, чтобы пришел Босс (если уровень не задаёт своё)")]
         [SerializeField] private int killsNeededForBoss = 10;
 
         [Header("Boss Intro Dialogue (Диалог при появлении босса)")]
@@ -58,10 +68,12 @@ namespace Tanks2D
         [Header("Enemy Health Scaling (Рост здоровья врагов)")]
         [Tooltip("Прибавка к HP за каждую следующую миссию (0.3 = +30%)")]
         [SerializeField] private float _healthGrowthPerMission = 0.3f;
-        [Tooltip("Прибавка к HP за каждую минуту боя (0.5 = +50% в минуту)")]
-        [SerializeField] private float _healthGrowthPerMinute = 0.5f;
-        [Tooltip("Прибавка к HP за каждый уровень героя (0.15 = +15% за уровень)")]
-        [SerializeField] private float _healthGrowthPerPlayerLevel = 0.15f;
+        [Tooltip("Первые минуты боя здоровье врагов не растёт со временем — время рубить толпы")]
+        [SerializeField] private float _healthGraceMinutes = 1f;
+        [Tooltip("После льготного времени HP умножается на (1 + x) за каждую минуту — экспонента (0.4 = ×1.4 в минуту)")]
+        [SerializeField] private float _healthTimeGrowth = 0.4f;
+        [Tooltip("Прибавка к HP за каждый уровень героя (0.08 = +8% за уровень)")]
+        [SerializeField] private float _healthGrowthPerPlayerLevel = 0.08f;
 
         [Header("Transition Settings (Переход после победы)")]
         [FormerlySerializedAs("campSceneName")]
@@ -80,11 +92,14 @@ namespace Tanks2D
         private int _currentKillsCount;
         private bool _isBossSpawned;
         private bool _isBossDefeated;
+        private LevelDefinition _level;
+        private readonly HashSet<MiniBossSpawn> _spawnedMiniBosses = new HashSet<MiniBossSpawn>();
 
         public static EnemySpawner2D Instance { get; private set; }
 
         public int KillsCount => _currentKillsCount;
-        public int KillsNeededForBoss => killsNeededForBoss;
+        public int KillsNeededForBoss => _level != null && _level.killsForBoss > 0 ? _level.killsForBoss : killsNeededForBoss;
+        public LevelDefinition Level => _level;
         public bool IsBossSpawned => _isBossSpawned;
         public bool IsBossDefeated => _isBossDefeated;
         public float BattleTime => _battleTime;
@@ -92,8 +107,22 @@ namespace Tanks2D
         // Враги крепнут вместе с героем: по миссии, по времени боя и по уровню героя (множители перемножаются)
         public float HealthMultiplier =>
             (1f + _healthGrowthPerMission * Mathf.Max(0, GameStats.Mission - 1)) *
-            (1f + _healthGrowthPerMinute * _battleTime / 60f) *
-            (1f + _healthGrowthPerPlayerLevel * Mathf.Max(0, GameStats.Level - 1));
+            Mathf.Pow(1f + _healthTimeGrowth, Mathf.Max(0f, _battleTime / 60f - _healthGraceMinutes)) *
+            (1f + _healthGrowthPerPlayerLevel * Mathf.Max(0, GameStats.Level - 1)) *
+            (_level != null ? _level.enemyHealthMultiplier : 1f);
+
+        // Способности босса: из уровня; если уровней нет — 1-й уровень щит, дальше всё
+        public BossAbility BossAbilityFlags
+        {
+            get
+            {
+                if (_level != null) return _level.bossAbilities;
+                return BossLevel <= 1 ? BossAbility.Shield : BossAbility.Shield | BossAbility.RamWall | BossAbility.DestroyTowers;
+            }
+        }
+
+        private EnemySpawnConfig[] ActiveEnemies =>
+            _level != null && _level.enemies != null && _level.enemies.Count > 0 ? _level.enemies.ToArray() : _enemiesConfigs;
 
         // x1 в первую минуту, x2 во вторую, x4 в третью...
         public int SpawnMultiplier => 1 << Mathf.Clamp(Mathf.FloorToInt(_battleTime / Mathf.Max(1f, _doublingPeriod)), 0, Mathf.Clamp(_maxDoublings, 0, 20));
@@ -117,6 +146,9 @@ namespace Tanks2D
                 Debug.LogError("[EnemySpawner2D] Ошибка: Спавнер не смог найти объект со скриптом Wall на сцене!");
             }
 
+            _level = LevelCatalog.Current;
+            if (_level != null) Debug.Log($"[Spawner] {_level.DisplayName}");
+
             PlayMusic(normalWaveMusic);
             _spawnProgress = 0.75f; // первый враг почти сразу
         }
@@ -126,7 +158,7 @@ namespace Tanks2D
             if (GamePause.IsPaused || Wall.IsGameOver) return;
             if (_isBossDefeated) return;
             if (_isBossSpawned && !_spawnDuringBoss) return;
-            if (_enemiesConfigs == null || _enemiesConfigs.Length == 0) return;
+            if (ActiveEnemies == null || ActiveEnemies.Length == 0) return;
 
             _battleTime += Time.deltaTime;
             _spawnProgress += Time.deltaTime * SpawnMultiplier / Mathf.Max(0.05f, _spawnRate);
@@ -140,49 +172,94 @@ namespace Tanks2D
                     break;
                 }
 
-                SpawnEnemy();
+                SpawnGroup();
                 _spawnProgress -= 1f;
             }
         }
 
-        private void SpawnEnemy()
+        // Группа врагов рядом друг с другом — толпа, которую весело косить
+        private void SpawnGroup()
         {
-            EnemySpawnConfig selectedConfig = GetRandomEnemyConfig();
-            if (selectedConfig == null || selectedConfig.enemyPrefab == null) return;
+            int count = Random.Range(Mathf.Max(1, _groupSize.x), Mathf.Max(_groupSize.x, _groupSize.y) + 1);
+            float centerX = GetRandomSpawnX();
+            GetSpawnBounds(out float minX, out float maxX);
+            float baseY = GetSpawnY(transform.position.y);
 
-            Spawn(selectedConfig.enemyPrefab, new Vector3(GetRandomSpawnX(), GetSpawnY(transform.position.y), 0f), false);
+            for (int i = 0; i < count; i++)
+            {
+                if (PigEnemy.AliveCount >= _maxAliveEnemies) return;
+
+                EnemySpawnConfig config = GetRandomEnemyConfig();
+                if (config == null || config.enemyPrefab == null) continue;
+
+                float x = Mathf.Clamp(centerX + Random.Range(-_groupSpread, _groupSpread), minX, maxX);
+                float y = baseY + Random.Range(0f, _groupDepth);
+                Spawn(config.enemyPrefab, new Vector3(x, y, 0f), false);
+            }
+        }
+
+        // Босс вышел — убираем остальных врагов, чтобы игрок сосредоточился на нём
+        private void ClearRegularEnemies()
+        {
+            foreach (PigEnemy enemy in new List<PigEnemy>(PigEnemy.Alive))
+            {
+                if (enemy != null && !enemy.IsBoss) enemy.Dismiss();
+            }
         }
 
         private void SpawnBoss()
         {
-            if (bossPrefab == null)
+            GameObject prefab = _level != null && _level.bossPrefab != null ? _level.bossPrefab : bossPrefab;
+            if (prefab == null)
             {
                 Debug.LogError("[EnemySpawner2D] Префаб Босса не назначен в инспекторе спавнера!");
                 return;
             }
 
             _isBossSpawned = true;
+            if (_clearEnemiesOnBoss) ClearRegularEnemies();
             Debug.Log($"[Spawner] ВНИМАНИЕ! ПОЯВИЛСЯ БОСС ур. {BossLevel}!");
             PlayMusic(bossMusic);
 
             Vector3 point = _bossSpawnPoint != null ? _bossSpawnPoint.position : transform.position;
-            GameObject boss = Spawn(bossPrefab, new Vector3(point.x, GetSpawnY(point.y), 0f), true);
+            float bossHealth = _level != null ? _level.bossHealthMultiplier : 1f;
+            GameObject boss = Spawn(prefab, new Vector3(point.x, GetSpawnY(point.y), 0f), true, bossHealth);
 
             BossAbilities abilities = boss.GetComponent<BossAbilities>();
-            if (abilities != null) abilities.Setup(BossLevel);
+            if (abilities != null) abilities.Setup(BossAbilityFlags, BossLevel);
 
             // Реплики при появлении босса (игра на паузе, пока диалог открыт)
-            if (_dialoguePanel != null && _bossIntroDialogue.Count > 0) _dialoguePanel.Play(_bossIntroDialogue, null);
+            List<DialogueLine> lines = _level != null && _level.bossIntroDialogue.Count > 0 ? _level.bossIntroDialogue : _bossIntroDialogue;
+            if (_dialoguePanel != null && lines.Count > 0) _dialoguePanel.Play(lines, null);
         }
 
-        private GameObject Spawn(GameObject prefab, Vector3 position, bool isBoss)
+        // Мини-боссы уровня появляются после заданного числа убийств
+        private void CheckMiniBosses()
+        {
+            if (_level == null || _level.miniBosses == null) return;
+
+            foreach (MiniBossSpawn mini in _level.miniBosses)
+            {
+                if (mini == null || mini.prefab == null || _spawnedMiniBosses.Contains(mini)) continue;
+                if (_currentKillsCount < mini.afterKills) continue;
+
+                _spawnedMiniBosses.Add(mini);
+                GameObject go = Spawn(mini.prefab, new Vector3(GetRandomSpawnX(), GetSpawnY(transform.position.y), 0f), false, mini.healthMultiplier);
+
+                BossAbilities abilities = go.GetComponent<BossAbilities>();
+                if (abilities != null) abilities.Setup(mini.abilities, BossLevel);
+                Debug.Log($"[Spawner] Мини-босс: {mini.prefab.name}");
+            }
+        }
+
+        private GameObject Spawn(GameObject prefab, Vector3 position, bool isBoss, float extraHealthMultiplier = 1f)
         {
             GameObject enemyGo = Instantiate(prefab, position, Quaternion.identity);
 
             PigEnemy enemy = enemyGo.GetComponent<PigEnemy>();
             if (enemy != null)
             {
-                enemy.Initialize(isBoss, HealthMultiplier);
+                enemy.Initialize(isBoss, HealthMultiplier * extraHealthMultiplier);
                 enemy.SetTargetWall(_wall);
             }
 
@@ -191,18 +268,30 @@ namespace Tanks2D
 
         private float GetRandomSpawnX()
         {
+            GetSpawnBounds(out float min, out float max);
+            return min < max ? Random.Range(min, max) : (min + max) * 0.5f;
+        }
+
+        // Границы линии появления по X
+        private void GetSpawnBounds(out float min, out float max)
+        {
             if (_spawnWidth > 0f)
             {
                 float half = _spawnWidth * 0.5f;
-                return transform.position.x + Random.Range(-half, half);
+                min = transform.position.x - half;
+                max = transform.position.x + half;
+                return;
             }
 
             PlayField field = PlayField.Instance;
-            if (field == null) return transform.position.x;
+            if (field == null)
+            {
+                min = max = transform.position.x;
+                return;
+            }
 
-            float min = field.Left + _horizontalMargin;
-            float max = field.Right - _horizontalMargin;
-            return min < max ? Random.Range(min, max) : field.Center.x;
+            min = field.Left + _horizontalMargin;
+            max = field.Right - _horizontalMargin;
         }
 
         // Высота появления: как стоит спавнер (или точка босса); при _alwaysAboveScreen — не ниже верхнего края экрана
@@ -259,7 +348,10 @@ namespace Tanks2D
 
                 _isBossDefeated = true;
                 GameStats.BossesDefeated++;
-                GameStats.Mission++;
+
+                // Следующий уровень; после последнего — кампания пройдена (остаёмся на последнем)
+                if (GameStats.Mission >= GameStats.TotalLevels) GameStats.CampaignCompleted = true;
+                else GameStats.Mission++;
                 Debug.Log("[Spawner] БОСС ПОВЕРЖЕН! Награда и переход в лобби...");
 
                 // Сначала награда (выбор стихии), потом лобби
@@ -271,7 +363,8 @@ namespace Tanks2D
             if (_isBossSpawned) return;
 
             _currentKillsCount++;
-            if (_currentKillsCount >= killsNeededForBoss) SpawnBoss();
+            CheckMiniBosses();
+            if (_currentKillsCount >= KillsNeededForBoss) SpawnBoss();
         }
 
         private void ScheduleLobby()
@@ -287,8 +380,9 @@ namespace Tanks2D
 
         private EnemySpawnConfig GetRandomEnemyConfig()
         {
+            EnemySpawnConfig[] configs = ActiveEnemies;
             int totalWeight = 0;
-            foreach (var config in _enemiesConfigs)
+            foreach (var config in configs)
             {
                 if (config.enemyPrefab != null && config.spawnChance > 0) totalWeight += config.spawnChance;
             }
@@ -298,7 +392,7 @@ namespace Tanks2D
             int randomWeight = Random.Range(0, totalWeight);
             int currentWeightSum = 0;
 
-            foreach (var config in _enemiesConfigs)
+            foreach (var config in configs)
             {
                 if (config.enemyPrefab == null || config.spawnChance <= 0) continue;
 

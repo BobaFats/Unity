@@ -32,8 +32,13 @@ namespace Tanks2D.EditorTools
         private static PigEnemy _probeEnemy;
         private static float _probeEnemyY;
         private static PigEnemy _boss;
-        private static bool _shieldSeen;
+
         private static bool _retreatSeen;
+        private static bool _shieldTested;
+        private static int _towersAtBossSpawn;
+        private static Transform _mountProbe;
+        private static Transform _originalMount;
+        private static Vector3 _originalTurretPosition;
         private static int _missionBeforeBossKill;
         private static float _bossSpawnGameTime;
         private static CharacterAnimations _animProbe;
@@ -94,8 +99,9 @@ namespace Tanks2D.EditorTools
             _step = 0;
             _exceptions = 0;
             _maxAliveSeen = 0;
-            _shieldSeen = false;
+
             _retreatSeen = false;
+            _shieldTested = false;
             _stepStart = EditorApplication.timeSinceStartup;
 
             Application.logMessageReceived -= OnLog;
@@ -137,6 +143,10 @@ namespace Tanks2D.EditorTools
                     if (Elapsed < 6) return;
                     var player = Object.FindAnyObjectByType<PlayerController2D>();
                     Check(PigEnemy.AliveCount > 0 || EnemySpawner2D.Instance.KillsCount > 0, $"Враги появляются (живых: {PigEnemy.AliveCount})");
+                    Check(PigEnemy.AliveCount + EnemySpawner2D.Instance.KillsCount >= 6, $"Враги идут толпами (появилось {PigEnemy.AliveCount + EnemySpawner2D.Instance.KillsCount} за первые секунды)");
+                    int strongest = 0;
+                    foreach (PigEnemy enemy in PigEnemy.Alive) strongest = Mathf.Max(strongest, enemy.MaxHP);
+                    Check(strongest > 0 && strongest <= GameStats.BulletDamage, $"В начале враги умирают с одного выстрела (самый крепкий: {strongest} HP, урон {GameStats.BulletDamage})");
                     Check(player != null && (player.CurrentAmmo < GameStats.MaxAmmo || player.IsReloading || EnemySpawner2D.Instance.KillsCount > 0),
                         $"Автоатака: герой стреляет без нажатий (патронов {player?.CurrentAmmo}/{GameStats.MaxAmmo})");
                     Check(GameObject.Find("OpenShopButton") == null, "Магазина нет");
@@ -147,6 +157,8 @@ namespace Tanks2D.EditorTools
                 case 1: // пауза
                 {
                     CheckVisualOverrides();
+                    CheckLevelsAndExperience();
+                    CheckWeaponSkins();
 
                     var pause = Object.FindAnyObjectByType<PauseMenu>();
                     Check(pause != null, "Есть меню паузы");
@@ -189,6 +201,7 @@ namespace Tanks2D.EditorTools
                     _probeStartVelocity = _probeBullet != null ? _probeBullet.Velocity : Vector2.zero;
                     _probeStartGameTime = Time.time;
                     StartAnimationProbe();
+                    StartMountProbe();
 
                     // Башни встали в слоты-объекты сцены
                     TowerManager towerManager = Object.FindAnyObjectByType<TowerManager>();
@@ -215,6 +228,7 @@ namespace Tanks2D.EditorTools
                         "Отражение по физике: угол падения = углу отражения, без самонаведения");
                     Check(Mathf.Abs(after.magnitude - _probeStartVelocity.magnitude) < 0.05f, "Скорость после отскока не теряется");
                     CheckAnimationProbe();
+                    CheckMountProbe();
                     NextStep();
                     break;
                 }
@@ -267,6 +281,21 @@ namespace Tanks2D.EditorTools
                     // Удвоение потока и лимит на экране
                     EnemySpawner2D spawner = EnemySpawner2D.Instance;
                     Check(spawner.SpawnMultiplier == 1, $"Первая минута: множитель x{spawner.SpawnMultiplier}");
+
+                    // Здоровье: первая минута льготная, дальше экспонента ×1.4 в минуту
+                    float realTime = spawner.BattleTime;
+                    SetField(spawner, "_battleTime", 0f);
+                    float h0 = spawner.HealthMultiplier;
+                    SetField(spawner, "_battleTime", 60f);
+                    float h1 = spawner.HealthMultiplier;
+                    SetField(spawner, "_battleTime", 180f);
+                    float h3 = spawner.HealthMultiplier;
+                    SetField(spawner, "_battleTime", 300f);
+                    float h5 = spawner.HealthMultiplier;
+                    Check(Mathf.Approximately(h0, h1) && Mathf.Abs(h3 / h0 - 1.96f) < 0.01f && Mathf.Abs(h5 / h3 - 1.96f) < 0.01f,
+                        $"Здоровье врагов: 1-я минута без роста, дальше экспонента (x{h0:0.00} -> 1 мин x{h1:0.00} -> 3 мин x{h3:0.00} -> 5 мин x{h5:0.00})");
+                    SetField(spawner, "_battleTime", realTime);
+
                     SetField(spawner, "_battleTime", 125f);
                     Check(spawner.SpawnMultiplier == 4, $"Через 2 минуты множитель x4 (сейчас x{spawner.SpawnMultiplier})");
                     SetField(spawner, "_spawnRate", 0.05f);
@@ -282,11 +311,10 @@ namespace Tanks2D.EditorTools
                     RepairWall();
                     AutoChooseLevelUps();
                     if (Elapsed < 4) return;
-                    Check(_maxAliveSeen == 50, $"Спавн упирается в лимит 50 врагов (максимум было {_maxAliveSeen})");
-
                     EnemySpawner2D spawner = EnemySpawner2D.Instance;
+                    int cap = (int)GetField(spawner, "_maxAliveEnemies");
+                    Check(cap >= 80 && _maxAliveSeen == cap, $"Спавн упирается в лимит {cap} врагов (максимум было {_maxAliveSeen})");
                     SetField(spawner, "_spawnRate", 1000f);
-                    foreach (PigEnemy enemy in new List<PigEnemy>(PigEnemy.Alive)) Object.Destroy(enemy.gameObject);
 
                     bool onSpawnLine = true;
                     foreach (PigEnemy enemy in PigEnemy.Alive)
@@ -302,11 +330,30 @@ namespace Tanks2D.EditorTools
                     // Стена с большим запасом: проверяем способности босса, а не баланс
                     GameStats.WallMaxHP = 100000;
                     RepairWall();
+
+                    // Уровень 2 (копия, чтобы не менять ассет) + мини-босс после следующего убийства
+                    LevelDefinition level2 = Object.Instantiate(LevelCatalog.Instance.Get(2));
+                    GameObject pigPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Vertical/Enemy_Pig.prefab");
+                    level2.miniBosses.Add(new MiniBossSpawn { prefab = pigPrefab, afterKills = spawner.KillsCount + 1, healthMultiplier = 3f });
+                    SetField(spawner, "_level", level2);
+                    int aliveBefore = PigEnemy.AliveCount;
+                    spawner.RegisterEnemyDeath(false);
+                    PigEnemy mini = PigEnemy.Alive.Count > 0 ? PigEnemy.Alive[PigEnemy.Alive.Count - 1] : null;
+                    Check(PigEnemy.AliveCount == aliveBefore + 1 && mini != null && mini.Difficulty >= 2.9f,
+                        $"Мини-босс из настроек уровня появился (сложность x{mini?.Difficulty:0.0})");
+                    if (mini != null) Object.Destroy(mini.gameObject);
+
+                    _towersAtBossSpawn = GameStats.TowerCount;
                     spawner.GetType().GetMethod("SpawnBoss", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(spawner, null);
                     _boss = null;
                     foreach (BossAbilities abilities in Object.FindObjectsByType<BossAbilities>()) _boss = abilities.GetComponent<PigEnemy>();
                     Check(_boss != null && _boss.GetComponent<BossAbilities>().Level == 2, "Босс ур. 2 появился");
+                    BossAbility bossFlags = _boss != null ? _boss.GetComponent<BossAbilities>().Abilities : BossAbility.None;
+                    Check(bossFlags == (BossAbility.Shield | BossAbility.RamWall | BossAbility.DestroyTowers), $"Способности босса из уровня 2: {bossFlags}");
                     Check(_boss != null && Mathf.Abs(_boss.transform.position.x - 2f) < 0.01f, $"Босс появился в точке BossSpawnPoint (x = {_boss?.transform.position.x:0.00})");
+                    int regularLeft = 0;
+                    foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss) regularLeft++;
+                    Check(regularLeft == 0 && _boss != null && !_boss.IsDying, $"При появлении босса остальные враги убраны (осталось {regularLeft})");
                     Check(_boss != null && _boss.GetComponent<CharacterAnimations>() != null, "У босса есть компонент анимаций");
 
                     // Ставим босса прямо над стеной, чтобы не ждать его подхода
@@ -339,14 +386,20 @@ namespace Tanks2D.EditorTools
                     if (_boss == null) { NextStep(); break; }
 
                     BossAbilities abilities = _boss.GetComponent<BossAbilities>();
-                    if (abilities.ShieldActive && _boss.DamageTakenMultiplier < 1f) _shieldSeen = true;
+                    if (abilities.ShieldActive && !_shieldTested) TestShield(abilities);
                     if (abilities.IsRetreating) _retreatSeen = true;
                     // Ждём по игровому времени: в batch-режиме оно может идти медленнее реального
                     float bossGameTime = Time.time - _bossSpawnGameTime;
-                    if (bossGameTime < 8f && Elapsed < 60 && !(_shieldSeen && _retreatSeen)) return;
+                    bool done = _shieldTested && _retreatSeen && abilities.TowersDestroyed > 0;
+                    if (bossGameTime < 14f && Elapsed < 90 && !done) return;
 
-                    Check(_shieldSeen, $"Босс ур. 1: включает щит (урон снижен) — игровое время {bossGameTime:0.0} с, реальное {Elapsed:0.0} с");
+                    Check(_shieldTested, $"Босс включает щит — игровое время {bossGameTime:0.0} с");
                     Check(_retreatSeen, "Босс ур. 2: таран по стене и откат назад");
+                    int regularDuringBoss = 0;
+                    foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss) regularDuringBoss++;
+                    Check(regularDuringBoss == 0, $"Пока жив босс, новые враги не появляются (на поле {regularDuringBoss})");
+                    Check(abilities.TowersDestroyed > 0 && GameStats.TowerCount == _towersAtBossSpawn - abilities.TowersDestroyed,
+                        $"Босс ур. 2 разрушает башни (разрушено {abilities.TowersDestroyed}, башен было {_towersAtBossSpawn}, осталось {GameStats.TowerCount})");
 
                     // Стихии были прокачаны до максимума в проверке выше — сбрасываем, чтобы было что предложить
                     foreach (ElementDefinition element in ElementCatalog.Instance.Elements) element.Level = 0;
@@ -377,6 +430,97 @@ namespace Tanks2D.EditorTools
                     Finish();
                     break;
             }
+        }
+
+        // ---------------------------------------------------------------- Щит босса
+
+        private static void TestShield(BossAbilities abilities)
+        {
+            _shieldTested = true;
+            Transform bar = _boss.transform.Find("ShieldBar");
+            Check(abilities.ShieldHP > 0 && bar != null && bar.gameObject.activeSelf,
+                $"Щит включён, у него своя полоска прочности ({abilities.ShieldHP} / {abilities.ShieldMaxHP})");
+
+            int hpBefore = _boss.CurrentHP;
+            int shieldBefore = abilities.ShieldHP;
+            int small = Mathf.Max(1, shieldBefore / 4);
+            _boss.ApplyDamage(small);
+            Check(_boss.CurrentHP == hpBefore && abilities.ShieldHP == shieldBefore - small,
+                $"Пока щит цел, урон уходит в щит (HP босса {hpBefore} -> {_boss.CurrentHP}, щит {shieldBefore} -> {abilities.ShieldHP})");
+
+            int rest = abilities.ShieldHP;
+            _boss.ApplyDamage(rest + 10);
+            Check(!abilities.ShieldActive && _boss.CurrentHP == hpBefore - 10 && !bar.gameObject.activeSelf,
+                $"Щит сломан — остаток урона прошёл по боссу (HP {hpBefore} -> {_boss.CurrentHP})");
+        }
+
+        // ---------------------------------------------------------------- Уровни, опыт, скины
+
+        private static void CheckLevelsAndExperience()
+        {
+            LevelCatalog levels = LevelCatalog.Instance;
+            bool numbered = levels != null && levels.Count == GameStats.TotalLevels;
+            for (int i = 0; numbered && i < levels.Count; i++) numbered = levels.Levels[i] != null && levels.Levels[i].levelNumber == i + 1;
+            Check(numbered, $"В кампании {levels?.Count} уровней, пронумерованы 1..{GameStats.TotalLevels}");
+
+            ExperienceSystem experience = ExperienceSystem.Instance;
+            int l1 = experience.XpRequiredFor(1), l2 = experience.XpRequiredFor(2), l10 = experience.XpRequiredFor(10);
+            Check(l1 == 10 && l2 == 15 && l10 > 300, $"Опыт до уровня растёт по экспоненте: {l1}, {l2} … ур.10: {l10}");
+            Check(ExperienceSystem.RewardFor(1, 1f) == 1 && ExperienceSystem.RewardFor(1, 4f) == 3 && ExperienceSystem.RewardFor(2, 4f) == 6,
+                "Награда за врага растёт с его сложностью (x1 -> 1, x4 -> 3 опыта)");
+        }
+
+        private static void CheckWeaponSkins()
+        {
+            var player = Object.FindAnyObjectByType<PlayerController2D>();
+            WeaponSkinCatalog catalog = WeaponSkinCatalog.Instance;
+            Check(catalog != null && catalog.Skins.Count >= 3, $"Скинов оружия в каталоге: {catalog?.Skins.Count}");
+            if (player == null || catalog == null) return;
+
+            VisualSlot weapon = player.Turret.Find("Weapon")?.GetComponent<VisualSlot>();
+            Sprite defaultSprite = weapon != null ? weapon.CustomSprite : null;
+
+            GameStats.WeaponSkinId = "Blaster";
+            player.ApplyWeaponSkin();
+            WeaponSkin blaster = WeaponSkinCatalog.Selected;
+            Check(weapon != null && blaster != null && weapon.CustomSprite == blaster.sprite && weapon.CustomColor == blaster.tint,
+                $"Скин «{blaster?.displayName}» применяется к оружию ({weapon?.CurrentSource})");
+
+            GameStats.WeaponSkinId = "Standard";
+            player.ApplyWeaponSkin();
+            Check(weapon != null && weapon.CustomSprite == defaultSprite, "Стандартный скин возвращает оружие как в сцене");
+            GameStats.WeaponSkinId = null;
+        }
+
+        // ---------------------------------------------------------------- Оружие следует за героем
+
+        private static void StartMountProbe()
+        {
+            var player = Object.FindAnyObjectByType<PlayerController2D>();
+            if (player == null) return;
+
+            Check(player.WeaponMount != null, $"Оружие прикреплено к герою (точка крепления: {player.WeaponMount?.name ?? "нет"})");
+
+            _originalMount = player.WeaponMount;
+            _originalTurretPosition = player.Turret.position;
+            _mountProbe = new GameObject("TestMount").transform;
+            _mountProbe.position = player.Turret.position;
+            player.SetWeaponMount(_mountProbe, true);
+            _mountProbe.position += new Vector3(1f, 0.5f, 0f);
+        }
+
+        private static void CheckMountProbe()
+        {
+            var player = Object.FindAnyObjectByType<PlayerController2D>();
+            if (player == null || _mountProbe == null) return;
+
+            Vector3 target = _originalTurretPosition + new Vector3(1f, 0.5f, 0f);
+            float distance = Vector2.Distance(player.Turret.position, target);
+            Check(distance < 0.05f, $"Оружие плавно догнало точку крепления (расстояние {distance:0.000})");
+
+            player.Turret.position = _originalTurretPosition;
+            player.SetWeaponMount(_originalMount, true);
+            Object.Destroy(_mountProbe.gameObject);
         }
 
         // ---------------------------------------------------------------- Анимации

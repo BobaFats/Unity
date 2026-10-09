@@ -29,11 +29,21 @@ namespace Tanks2D
             public Action OnDone;
         }
 
-        [Header("Кривая опыта")]
+        // Нужно опыта до следующего уровня = База × Рост^(уровень − 1) — экспонента.
+        // Награда за врага = опыт врага × Сложность^Показатель, где сложность — во сколько раз
+        // враг крепче базового (растёт с уровнем кампании, временем боя и уровнем героя).
+        public const int DefaultBaseXp = 10;
+        public const float DefaultXpGrowth = 1.5f;
+
+        [Header("Кривая опыта (экспонента)")]
         [Tooltip("Сколько опыта нужно для 2-го уровня")]
-        [SerializeField] private int _baseXpToLevel = 5;
+        [SerializeField] private int _baseXpToLevel = DefaultBaseXp;
         [Tooltip("Во сколько раз растёт требование с каждым уровнем")]
-        [SerializeField] private float _xpGrowth = 1.35f;
+        [SerializeField] private float _xpGrowth = DefaultXpGrowth;
+
+        [Header("Награда за врага")]
+        [Tooltip("Насколько сильно сложность врага увеличивает опыт за него (0 — не влияет, 1 — пропорционально)")]
+        [SerializeField, Range(0f, 1.5f)] private float _difficultyExponent = 0.75f;
 
         [Header("Выбор награды")]
         [Tooltip("Сколько случайных вариантов показывать при новом уровне")]
@@ -63,6 +73,14 @@ namespace Tanks2D
         {
             GamePause.Set(this, false);
             if (Instance == this) Instance = null;
+        }
+
+        // Опыт за убийство с учётом сложности врага
+        public static int RewardFor(int baseXp, float difficulty)
+        {
+            if (baseXp <= 0) return 0;
+            float exponent = Instance != null ? Instance._difficultyExponent : 0.75f;
+            return Mathf.Max(1, Mathf.RoundToInt(baseXp * Mathf.Pow(Mathf.Max(1f, difficulty), exponent)));
         }
 
         public static void AddExperience(int amount)

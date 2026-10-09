@@ -108,3 +108,6 @@ InitTestScene*.unity*
 
 # Local archives
 *.zip
+
+# Local clone of the repo (not part of the project)
+/Unity/

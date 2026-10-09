@@ -20,6 +20,13 @@ namespace Tanks2D
             SetNormalized(1f);
         }
 
+        public Vector2 Size => _size;
+
+        public void SetFillColor(Color color)
+        {
+            if (_fill != null) _fill.color = color;
+        }
+
         public void SetNormalized(float value)
         {
             if (_fill == null) return;

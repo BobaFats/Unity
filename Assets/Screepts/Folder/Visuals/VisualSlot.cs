@@ -102,6 +102,32 @@ namespace Tanks2D
             Apply();
         }
 
+        // Для скинов и других систем, меняющих арт из кода
+        public Sprite CustomSprite => _customSprite;
+        public GameObject CustomPrefab => _customPrefab;
+        public Color CustomColor => _customColor;
+        public Vector3 Offset => _offset;
+        public Vector3 Rotation => _rotation;
+        public float Scale => _scale;
+
+        public void SetArt(Sprite sprite, GameObject prefab, Color color)
+        {
+            _customSprite = sprite;
+            _customPrefab = prefab;
+            _customColor = color;
+            _lastTargetName = null; // новый арт — не принимать прошлое положение за ручной сдвиг
+            Apply();
+        }
+
+        public void SetPlacement(Vector3 offset, Vector3 rotation, float scale)
+        {
+            _offset = offset;
+            _rotation = rotation;
+            _scale = scale;
+            _lastTargetName = null;
+            Apply();
+        }
+
         public void Configure(VisualId id, int sortingOrder, bool showLabel = true)
         {
             _id = id;

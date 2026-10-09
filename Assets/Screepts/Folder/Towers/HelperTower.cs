@@ -3,7 +3,8 @@ using UnityEngine;
 namespace Tanks2D
 {
     // Башня-помощник: сама целится в ближайшего врага и стреляет теми же пулями, что и герой
-    // (пули тоже отскакивают от бортов). Урон — доля от текущего урона героя.
+    // (пули тоже отскакивают от стен). Урон — доля от текущего урона героя.
+    // Босс со способностью DestroyTowers может её разрушить: башня мигает красным и рушится.
     public class HelperTower : MonoBehaviour
     {
         [SerializeField] private Transform _turret;
@@ -18,15 +19,28 @@ namespace Tanks2D
         [Tooltip("Дальность стрельбы в мировых единицах")]
         [SerializeField] private float _range = 20f;
 
-        [Tooltip("Анимации башни: Idle, Attack (выстрел). Пусто — берутся с этого же объекта")]
+        [Tooltip("Анимации башни: Idle, Attack (выстрел), Death (разрушена). Пусто — берутся с этого же объекта")]
         [SerializeField] private CharacterAnimations _animations;
 
+        [Header("Разрушение")]
+        [SerializeField] private Color _warningColor = new Color(1f, 0.25f, 0.25f);
+        [SerializeField] private float _warningBlinkRate = 8f;
+
         private float _nextFireTime;
+        private bool _doomed;
+        private float _warningTime;
+        private VisualSlot _visual;
+        private Color _baseColor = Color.white;
+
+        public bool IsDoomed => _doomed;
 
         private void Start()
         {
             if (_turret == null) _turret = transform;
             if (_animations == null) _animations = GetComponent<CharacterAnimations>();
+            _visual = GetComponent<VisualSlot>();
+            if (_visual != null && _visual.Renderer != null) _baseColor = _visual.Renderer.color;
+
             // Разносим первые выстрелы, чтобы башни не стреляли синхронно
             _nextFireTime = Time.time + Random.Range(0f, _fireDelay);
         }
@@ -34,6 +48,12 @@ namespace Tanks2D
         private void Update()
         {
             if (GamePause.IsPaused || Wall.IsGameOver) return;
+
+            if (_doomed)
+            {
+                Blink();
+                return;
+            }
 
             PigEnemy target = PigEnemy.FindNearest(_turret.position);
             if (target == null) return;
@@ -53,6 +73,41 @@ namespace Tanks2D
             PlayerController2D.SpawnBullet(_bulletPrefab, position, _turret.rotation, _bulletSpeed, damage);
             if (_animations != null) _animations.Play(CharacterAnimation.Attack);
             _nextFireTime = Time.time + _fireDelay;
+        }
+
+        // Босс выбрал эту башню: перестаёт стрелять и мигает
+        public void MarkForDestruction(float warningSeconds)
+        {
+            _doomed = true;
+            _warningTime = 0f;
+        }
+
+        public void CancelDestruction()
+        {
+            _doomed = false;
+            SetColor(_baseColor);
+        }
+
+        // Разрушение: анимация смерти (если есть), затем объект удаляется
+        public void Demolish()
+        {
+            _doomed = true;
+            SetColor(_warningColor);
+
+            float duration = _animations != null ? _animations.Play(CharacterAnimation.Death) : 0f;
+            Destroy(gameObject, duration > 0f ? duration + 0.2f : 0.05f);
+        }
+
+        private void Blink()
+        {
+            _warningTime += Time.deltaTime;
+            bool on = Mathf.Repeat(_warningTime * _warningBlinkRate, 2f) < 1f;
+            SetColor(on ? _warningColor : _baseColor);
+        }
+
+        private void SetColor(Color color)
+        {
+            if (_visual != null && _visual.Renderer != null) _visual.Renderer.color = color;
         }
     }
 }

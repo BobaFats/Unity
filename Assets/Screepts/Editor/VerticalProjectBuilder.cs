@@ -15,7 +15,7 @@ namespace Tanks2D.EditorTools
 {
     // Собирает вертикальную (портретную) версию игры: заглушки, каталоги визуала и стихий, префабы, сцены Menu / Lobby / Battle.
     // Меню: Tools > Vertical Shooter.
-    public static class VerticalProjectBuilder
+    public static partial class VerticalProjectBuilder
     {
         private const string MenuRoot = "Tools/Vertical Shooter/";
 
@@ -66,7 +66,7 @@ namespace Tanks2D.EditorTools
         public static void BuildAllMenu()
         {
             string message = IsBuilt
-                ? $"Префабы в {PrefabFolder} и сцены в {SceneFolder} будут пересозданы (ручные правки в них потеряются).\n\nКаталоги визуала и стихий НЕ перезаписываются — назначенные спрайты и настройки сохранятся."
+                ? $"ВНИМАНИЕ: префабы в {PrefabFolder} и сцены в {SceneFolder} будут пересозданы С НУЛЯ — всё, что вставлено в них руками (модели героя, анимации, расстановка), пропадёт.\n\nДля обычного обновления используйте «Update Project (safe)».\n\nКаталоги визуала и стихий НЕ перезаписываются — назначенные спрайты и настройки сохранятся."
                 : $"Будут созданы:\n• заглушки, каталог визуала и стихии в {ResourcesFolder}\n• префабы в {PrefabFolder}\n• сцены Menu / Lobby / Battle в {SceneFolder}\n• портретные настройки Player Settings\n\nСтарые сцены и префабы не изменяются.";
 
             if (!EditorUtility.DisplayDialog("Vertical Shooter", message, "Собрать", "Отмена")) return;
@@ -148,6 +148,9 @@ namespace Tanks2D.EditorTools
 
                 ConfigureBuildSettings();
                 ConfigurePlayerSettings();
+
+                // Всё, что добавлялось позже (уровни, скины, щит босса…), — тем же путём, что и обновление
+                ApplyUpgrades();
 
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
@@ -303,8 +306,8 @@ namespace Tanks2D.EditorTools
                 Bullet = CreateBulletPrefab()
             };
 
-            prefabs.Pig = CreateEnemyPrefab("Enemy_Pig", VisualId.EnemyPig, 30, 2f, 10, 1, 0f, false, prefabs);
-            prefabs.Chicken = CreateEnemyPrefab("Enemy_Chicken", VisualId.EnemyChicken, 15, 4f, 5, 2, 0f, false, prefabs);
+            prefabs.Pig = CreateEnemyPrefab("Enemy_Pig", VisualId.EnemyPig, 8, 2f, 10, 1, 0f, false, prefabs);
+            prefabs.Chicken = CreateEnemyPrefab("Enemy_Chicken", VisualId.EnemyChicken, 5, 4f, 5, 2, 0f, false, prefabs);
             prefabs.Boss = CreateEnemyPrefab("Boss_Pig", VisualId.Boss, 300, 0.5f, 30, 15, 0.7f, true, prefabs);
             prefabs.Tower = CreateTowerPrefab(prefabs.Bullet);
             return prefabs;
@@ -591,14 +594,14 @@ namespace Tanks2D.EditorTools
 
             Wire(spawner,
                 ("_wall", wall),
-                ("_spawnRate", 2f),
+                ("_spawnRate", 1.5f),
                 ("_spawnWidth", FieldSize.x - 1.4f),
                 ("_bossSpawnPoint", bossPoint),
                 ("bossPrefab", prefabs.Boss),
-                ("killsNeededForBoss", 60),
+                ("killsNeededForBoss", 150),
                 ("_doublingPeriod", 60f),
-                ("_maxAliveEnemies", 50),
-                ("_spawnDuringBoss", true),
+                ("_maxAliveEnemies", 80),
+                ("_spawnDuringBoss", false),
                 ("_healthGrowthPerMission", 0.3f),
                 ("lobbySceneName", LobbySceneName),
                 ("delayBeforeLobby", 1.5f),

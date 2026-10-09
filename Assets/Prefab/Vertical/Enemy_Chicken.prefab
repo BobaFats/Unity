@@ -427,7 +427,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dbb7bac171cbcb840b15d4c808a18137, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PigEnemy
-  maxHP: 15
+  maxHP: 5
   speed: 4
   knockbackResistance: 0
   knockbackSpeed: 8
@@ -462,26 +462,32 @@ MonoBehaviour:
     clip: {fileID: 0}
     frames: []
     framesPerSecond: 12
+    speed: 1
   _move:
     clip: {fileID: 0}
     frames: []
     framesPerSecond: 12
+    speed: 1
   _attack:
     clip: {fileID: 0}
     frames: []
     framesPerSecond: 12
+    speed: 1
   _hit:
     clip: {fileID: 0}
     frames: []
     framesPerSecond: 12
+    speed: 1
   _death:
     clip: {fileID: 0}
     frames: []
     framesPerSecond: 12
+    speed: 1
   _special:
     clip: {fileID: 0}
     frames: []
     framesPerSecond: 12
+    speed: 1
 --- !u!1 &5241003605888573029
 GameObject:
   m_ObjectHideFlags: 0

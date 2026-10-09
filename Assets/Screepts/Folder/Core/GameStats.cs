@@ -24,6 +24,9 @@ namespace Tanks2D
         public const int XpWallHPStep = 50;
         public const int MaxWallHP = 1000;
 
+        // Кампания
+        public const int TotalLevels = 30;
+
         public static int BulletDamage { get; set; }
         public static float FireDelay { get; set; }
         public static float ReloadTime { get; set; }
@@ -39,9 +42,13 @@ namespace Tanks2D
         public static int Level { get; set; }
         public static int Experience { get; set; }
 
-        // Кампания: номер текущей миссии (= уровень босса) и сколько боссов побеждено
+        // Кампания: номер текущего уровня 1..30 (= уровень босса) и сколько боссов побеждено
         public static int Mission { get; set; }
         public static int BossesDefeated { get; set; }
+        public static bool CampaignCompleted { get; set; }
+
+        // Выбранный скин оружия героя (id из WeaponSkinCatalog; пусто — первый в каталоге)
+        public static string WeaponSkinId { get; set; }
 
         // Уровни стихий пуль по id стихии (0 — не изучена)
         private static readonly Dictionary<string, int> _elementLevels = new Dictionary<string, int>();
@@ -69,6 +76,7 @@ namespace Tanks2D
             Experience = 0;
             Mission = 1;
             BossesDefeated = 0;
+            CampaignCompleted = false;
             _elementLevels.Clear();
         }
 

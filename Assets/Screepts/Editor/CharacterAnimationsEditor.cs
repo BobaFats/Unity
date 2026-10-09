@@ -32,7 +32,7 @@ namespace Tanks2D.EditorTools
                 MessageType.Info);
 
             EditorGUILayout.PropertyField(serializedObject.FindProperty("_visual"), new GUIContent("Внешний вид"));
-            EditorGUILayout.PropertyField(serializedObject.FindProperty("_speed"), new GUIContent("Скорость"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("_speed"), new GUIContent("Общая скорость", "Множитель скорости для всех анимаций объекта"));
             EditorGUILayout.Space();
 
             foreach ((string field, CharacterAnimation state, string title) in Slots)
@@ -51,6 +51,8 @@ namespace Tanks2D.EditorTools
                         EditorGUILayout.PropertyField(slot.FindPropertyRelative("clip"), new GUIContent("Animation Clip"));
                         EditorGUILayout.PropertyField(slot.FindPropertyRelative("frames"), new GUIContent("Кадры (спрайты)"), true);
                         EditorGUILayout.PropertyField(slot.FindPropertyRelative("framesPerSecond"), new GUIContent("Кадров в секунду"));
+                        EditorGUILayout.PropertyField(slot.FindPropertyRelative("speed"),
+                            new GUIContent("Скорость этой анимации", "Умножается на общую скорость. 2 — вдвое быстрее, 0.5 — вдвое медленнее"));
 
                     }
                 }

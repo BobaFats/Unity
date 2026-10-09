@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "2D Правки Серега.slnx"
+    "dotnet.defaultSolution": "2Dshooter-main.slnx"
 }

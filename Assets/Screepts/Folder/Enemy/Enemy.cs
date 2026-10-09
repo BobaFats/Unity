@@ -68,6 +68,12 @@ public class PigEnemy : MonoBehaviour
     // Для способностей босса
     public event Action<PigEnemy> WallAttacked;
     public float DamageTakenMultiplier { get; set; } = 1f;
+
+    // Поглотитель урона (например, щит босса): получает входящий урон, возвращает то, что прошло дальше
+    public Func<int, int> DamageAbsorber { get; set; }
+
+    // Сложность врага = во сколько раз его здоровье выше базового (влияет на награду опытом)
+    public float Difficulty => _healthMultiplier;
     public float AttackDamageMultiplier { get; set; } = 1f;
     public bool MovementLocked { get; set; }
 
@@ -229,6 +235,23 @@ public class PigEnemy : MonoBehaviour
 
         bool shielded = DamageTakenMultiplier < 1f;
         damage = Mathf.Max(0, Mathf.RoundToInt(damage * DamageTakenMultiplier));
+
+        // Щит принимает урон на себя; по здоровью проходит только остаток
+        if (DamageAbsorber != null)
+        {
+            int passed = Mathf.Clamp(DamageAbsorber(damage), 0, damage);
+            int absorbed = damage - passed;
+            damage = passed;
+
+            if (absorbed > 0)
+            {
+                SpawnFloatingText(damageTextPrefab, absorbed.ToString(), new Color(0.45f, 0.75f, 1f), 0.25f);
+                _flashUntil = Time.time + hitFlashDuration;
+            }
+
+            if (damage == 0) return;
+        }
+
         currentHP -= damage;
 
         if (healthBar != null) healthBar.SetNormalized((float)currentHP / maxHP);
@@ -298,6 +321,42 @@ public class PigEnemy : MonoBehaviour
 
     // ---------------------------------------------------------------- Смерть
 
+    // Убрать врага со сцены без опыта и без засчитанного убийства (например, при появлении босса)
+    public void Dismiss()
+    {
+        if (isDying) return;
+        isDying = true;
+        _alive.Remove(this);
+
+        if (healthBar != null) healthBar.gameObject.SetActive(false);
+        foreach (Collider2D col in GetComponentsInChildren<Collider2D>()) col.enabled = false;
+
+        StartCoroutine(FadeOutRoutine());
+    }
+
+    private IEnumerator FadeOutRoutine()
+    {
+        Vector3 startScale = transform.localScale;
+        SpriteRenderer spriteRenderer = visual != null ? visual.Renderer : null;
+        float elapsed = 0f;
+
+        while (elapsed < deathFadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / deathFadeDuration;
+            transform.localScale = Vector3.Lerp(startScale, startScale * 0.3f, t);
+            if (spriteRenderer != null)
+            {
+                Color c = _baseColor;
+                c.a = 1f - t;
+                spriteRenderer.color = c;
+            }
+            yield return null;
+        }
+
+        Destroy(gameObject);
+    }
+
     private void Die()
     {
         if (isDying) return;
@@ -305,7 +364,7 @@ public class PigEnemy : MonoBehaviour
         _alive.Remove(this);
 
         // Сначала опыт (повышения уровня), потом спавнер (за босса — награда и лобби)
-        Tanks2D.ExperienceSystem.AddExperience(xpReward);
+        Tanks2D.ExperienceSystem.AddExperience(Tanks2D.ExperienceSystem.RewardFor(xpReward, Difficulty));
 
         if (Tanks2D.EnemySpawner2D.Instance != null)
         {
