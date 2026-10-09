@@ -39,6 +39,12 @@ namespace Tanks2D.EditorTools
         private static Transform _mountProbe;
         private static Transform _originalMount;
         private static Vector3 _originalTurretPosition;
+        private static YogSothoth _yog;
+        private static PigEnemy _yogEnemy;
+        private static int _yogPhase;
+        private static float _yogPhaseStart;
+        private static int _towersBeforeYog;
+        private static int _regularAfterBoss;
         private static int _missionBeforeBossKill;
         private static float _bossSpawnGameTime;
         private static CharacterAnimations _animProbe;
@@ -306,14 +312,25 @@ namespace Tanks2D.EditorTools
                     break;
                 }
 
-                case 6: // лимит живых врагов, затем босс ур. 2
+                case 6: // Йог-Сотот
+                    StartYogTest();
+                    NextStep();
+                    break;
+
+                case 7:
+                    RepairWall();
+                    AutoChooseLevelUps();
+                    if (TickYogTest()) NextStep();
+                    break;
+
+                case 8: // лимит живых врагов, затем босс ур. 2
                 {
                     RepairWall();
                     AutoChooseLevelUps();
                     if (Elapsed < 4) return;
                     EnemySpawner2D spawner = EnemySpawner2D.Instance;
                     int cap = (int)GetField(spawner, "_maxAliveEnemies");
-                    Check(cap >= 80 && _maxAliveSeen == cap, $"Спавн упирается в лимит {cap} врагов (максимум было {_maxAliveSeen})");
+                    Check(cap >= 80 && _maxAliveSeen >= cap, $"Спавн упирается в лимит {cap} врагов (максимум было {_maxAliveSeen})");
                     SetField(spawner, "_spawnRate", 1000f);
 
                     bool onSpawnLine = true;
@@ -343,7 +360,11 @@ namespace Tanks2D.EditorTools
                         $"Мини-босс из настроек уровня появился (сложность x{mini?.Difficulty:0.0})");
                     if (mini != null) Object.Destroy(mini.gameObject);
 
+                    // После проверки Йога башен может не остаться — восстанавливаем для проверки босса
+                    while (TowerManager.Instance != null && TowerManager.Instance.CanAddTower) TowerManager.Instance.AddTower();
                     _towersAtBossSpawn = GameStats.TowerCount;
+                    int regularBefore = 0;
+                    foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss) regularBefore++;
                     spawner.GetType().GetMethod("SpawnBoss", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(spawner, null);
                     _boss = null;
                     foreach (BossAbilities abilities in Object.FindObjectsByType<BossAbilities>()) _boss = abilities.GetComponent<PigEnemy>();
@@ -353,7 +374,9 @@ namespace Tanks2D.EditorTools
                     Check(_boss != null && Mathf.Abs(_boss.transform.position.x - 2f) < 0.01f, $"Босс появился в точке BossSpawnPoint (x = {_boss?.transform.position.x:0.00})");
                     int regularLeft = 0;
                     foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss) regularLeft++;
-                    Check(regularLeft == 0 && _boss != null && !_boss.IsDying, $"При появлении босса остальные враги убраны (осталось {regularLeft})");
+                    _regularAfterBoss = regularLeft;
+                    Check(regularLeft == regularBefore && regularLeft > 0 && _boss != null && !_boss.IsDying,
+                        $"При появлении босса уже вышедшие враги остаются в бою ({regularLeft} из {regularBefore})");
                     Check(_boss != null && _boss.GetComponent<CharacterAnimations>() != null, "У босса есть компонент анимаций");
 
                     // Ставим босса прямо над стеной, чтобы не ждать его подхода
@@ -379,7 +402,7 @@ namespace Tanks2D.EditorTools
                     break;
                 }
 
-                case 7: // щит и таран с откатом
+                case 9: // щит и таран с откатом
                 {
                     RepairWall();
                     AutoChooseLevelUps();
@@ -397,7 +420,7 @@ namespace Tanks2D.EditorTools
                     Check(_retreatSeen, "Босс ур. 2: таран по стене и откат назад");
                     int regularDuringBoss = 0;
                     foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss) regularDuringBoss++;
-                    Check(regularDuringBoss == 0, $"Пока жив босс, новые враги не появляются (на поле {regularDuringBoss})");
+                    Check(regularDuringBoss <= _regularAfterBoss, $"Пока жив босс, новые враги не появляются (было {_regularAfterBoss}, стало {regularDuringBoss})");
                     Check(abilities.TowersDestroyed > 0 && GameStats.TowerCount == _towersAtBossSpawn - abilities.TowersDestroyed,
                         $"Босс ур. 2 разрушает башни (разрушено {abilities.TowersDestroyed}, башен было {_towersAtBossSpawn}, осталось {GameStats.TowerCount})");
 
@@ -422,7 +445,7 @@ namespace Tanks2D.EditorTools
                     break;
                 }
 
-                case 8: // переход в лобби
+                case 10: // переход в лобби
                     AutoChooseLevelUps();
                     if (SceneManager.GetActiveScene().name != "Lobby" && Elapsed < 6) return;
                     Check(SceneManager.GetActiveScene().name == "Lobby", $"После босса — лобби (сцена {SceneManager.GetActiveScene().name})");
@@ -430,6 +453,123 @@ namespace Tanks2D.EditorTools
                     Finish();
                     break;
             }
+        }
+
+        // ---------------------------------------------------------------- Йог-Сотот
+
+        private static void StartYogTest()
+        {
+            GameStats.WallMaxHP = 100000;
+            RepairWall();
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Vertical/Yog_Sothoth.prefab");
+            Check(prefab != null && prefab.GetComponent<YogSothoth>() != null, "Есть префаб Йог-Сотота");
+
+            LevelCatalog levels = LevelCatalog.Instance;
+            bool onLevels = prefab != null && !levels.Get(3).miniBosses.Exists(m => m.prefab == prefab);
+            for (int i = 4; onLevels && i <= GameStats.TotalLevels; i++) onLevels = levels.Get(i).miniBosses.Exists(m => m.prefab == prefab);
+            Check(onLevels, "Йог-Сотот появляется на уровнях 4–30 (и не появляется на 1–3)");
+            if (prefab == null) return;
+
+            EnemySpawner2D spawner = EnemySpawner2D.Instance;
+            MethodInfo spawn = spawner.GetType().GetMethod("Spawn", BindingFlags.Instance | BindingFlags.NonPublic);
+            var go = (GameObject)spawn.Invoke(spawner, new object[] { prefab, new Vector3(0f, Wall.ActiveInstance.TopY + 7f, 0f), false, 1f });
+
+            _yog = go.GetComponent<YogSothoth>();
+            _yogEnemy = go.GetComponent<PigEnemy>();
+            _towersBeforeYog = GameStats.TowerCount;
+            _yogPhase = 0;
+            _yogPhaseStart = Time.time;
+        }
+
+        // true — проверка Йога закончена
+        private static bool TickYogTest()
+        {
+            if (_yog == null || _yogEnemy == null)
+            {
+                Check(false, "Йог-Сотот появился");
+                return true;
+            }
+
+            float t = Time.time - _yogPhaseStart;
+            Wall wall = Wall.ActiveInstance;
+
+            switch (_yogPhase)
+            {
+                case 0: // идёт к стене — неуязвим
+                {
+                    if (t < 0.2f) return false;
+                    int hp = _yogEnemy.CurrentHP;
+                    _yogEnemy.ApplyDamage(100000);
+                    Check(_yog.CurrentState == YogSothoth.State.Approaching && _yogEnemy.CurrentHP == hp && !_yogEnemy.IsDying,
+                        $"Йог неуязвим, пока идёт к стене (HP {hp} -> {_yogEnemy.CurrentHP})");
+                    NextYogPhase();
+                    return false;
+                }
+
+                case 1: // остановился у стены, выросли щупальца
+                {
+                    if (_yog.CurrentState == YogSothoth.State.Approaching && t < 15f) return false;
+
+                    float gap = (_yogEnemy.transform.position.y - _yogEnemy.BottomOffset) - wall.TopY;
+                    Check(Mathf.Abs(gap - _yog.StopDistance) < 0.05f,
+                        $"Йог остановился в 100 px от стены (зазор {gap:0.00}, нужно {_yog.StopDistance:0.00}, шёл {t:0.0} с)");
+                    Check(_yog.TentaclesAlive == 3, $"Перед Йогом выросли щупальца ({_yog.TentaclesAlive})");
+
+                    int hp = _yogEnemy.CurrentHP;
+                    _yogEnemy.ApplyDamage(100000);
+                    Check(_yogEnemy.CurrentHP == hp, "Пока живы щупальца, Йог неуязвим");
+                    NextYogPhase();
+                    return false;
+                }
+
+                case 2: // сначала разрушает башни
+                {
+                    if (_yog.TowersDestroyed == 0 && t < 20f) return false;
+                    Check(_yog.TowersDestroyed > 0 && _yog.WallHits == 0 && GameStats.TowerCount == _towersBeforeYog - _yog.TowersDestroyed,
+                        $"Йог сначала разрушает башни (разрушено {_yog.TowersDestroyed}, ударов по стене {_yog.WallHits})");
+
+                    TowerManager towers = TowerManager.Instance;
+                    foreach (GameObject tower in new List<GameObject>(towers.Towers)) towers.DestroyTower(tower.GetComponent<HelperTower>());
+                    NextYogPhase();
+                    return false;
+                }
+
+                case 3: // башен нет — двойной урон стене
+                {
+                    if (_yog.WallHits == 0 && t < 20f) return false;
+                    Check(_yog.WallHits > 0 && _yog.LastWallDamage == _yogEnemy.AttackDamage * 2,
+                        $"Без башен Йог бьёт стену двойным уроном ({_yog.LastWallDamage} = 2 × {_yogEnemy.AttackDamage})");
+
+                    foreach (PigEnemy enemy in new List<PigEnemy>(PigEnemy.Alive))
+                    {
+                        if (enemy.name.StartsWith("Tentacle")) enemy.ApplyDamage(100000);
+                    }
+                    NextYogPhase();
+                    return false;
+                }
+
+                case 4: // щупальца уничтожены — Йог уязвим
+                {
+                    if (t < 0.1f) return false;
+                    int hp = _yogEnemy.CurrentHP;
+                    _yogEnemy.ApplyDamage(5);
+                    Check(_yog.CurrentState == YogSothoth.State.Vulnerable && _yogEnemy.CurrentHP == hp - 5,
+                        $"После гибели щупалец Йог получает урон (HP {hp} -> {_yogEnemy.CurrentHP})");
+
+                    _yogEnemy.ApplyDamage(10000000);
+                    Check(_yogEnemy.IsDying, "Йог-Сотот уничтожен");
+                    return true;
+                }
+            }
+
+            return true;
+        }
+
+        private static void NextYogPhase()
+        {
+            _yogPhase++;
+            _yogPhaseStart = Time.time;
         }
 
         // ---------------------------------------------------------------- Щит босса

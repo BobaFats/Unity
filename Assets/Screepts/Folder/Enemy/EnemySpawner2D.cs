@@ -39,8 +39,8 @@ namespace Tanks2D
         [SerializeField] private int _maxAliveEnemies = 80;
         [Tooltip("Продолжать спавн обычных врагов, пока жив босс")]
         [SerializeField] private bool _spawnDuringBoss = false;
-        [Tooltip("Когда появляется босс, все обычные враги и мини-боссы исчезают (без опыта)")]
-        [SerializeField] private bool _clearEnemiesOnBoss = true;
+        [Tooltip("Когда появляется босс, убрать всех обычных врагов и мини-боссов (без опыта). Выкл — они продолжают бой, но новые не появляются")]
+        [SerializeField] private bool _clearEnemiesOnBoss = false;
         [Tooltip("Ширина линии появления врагов (по центру объекта спавнера). 0 — вся ширина поля")]
         [SerializeField] private float _spawnWidth = 7.6f;
         [Tooltip("Отступ от боковых краёв поля (если ширина линии = 0)")]

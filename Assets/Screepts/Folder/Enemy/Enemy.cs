@@ -79,6 +79,11 @@ public class PigEnemy : MonoBehaviour
 
     public bool IsDying => isDying;
     public bool IsBoss => _isBoss;
+    public int AttackDamage => attackDamage;
+    public float AttackRate => attackRate;
+    public Tanks2D.Wall TargetWall => _targetWall;
+    // Расстояние от точки врага до низа его картинки
+    public float BottomOffset => HalfHeight;
     public int CurrentHP => currentHP;
     public int MaxHP => maxHP;
     public bool IsSlowed => Time.time < _slowUntil;

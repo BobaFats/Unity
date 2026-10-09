@@ -45,6 +45,7 @@ namespace Tanks2D.EditorTools
             EnsureWeaponSkins();
             UpgradeBossPrefab();
             RebalanceEnemyPrefabs();
+            EnsureYogSothoth();
             UpgradeBattleScene();
             UpgradeLobbyScene();
             AssetDatabase.SaveAssets();
@@ -248,6 +249,14 @@ namespace Tanks2D.EditorTools
             changed |= SetIf(so.FindProperty("killsNeededForBoss"), 60, 150);
             changed |= SetIf(so.FindProperty("_healthGrowthPerPlayerLevel"), 0.15f, 0.08f);
 
+            // Босс больше не убирает остальных врагов: они продолжают бой, новые не появляются
+            SerializedProperty clearOnBoss = so.FindProperty("_clearEnemiesOnBoss");
+            if (clearOnBoss != null && clearOnBoss.boolValue)
+            {
+                clearOnBoss.boolValue = false;
+                changed = true;
+            }
+
             SerializedProperty duringBoss = so.FindProperty("_spawnDuringBoss");
             if (duringBoss != null && duringBoss.boolValue)
             {
@@ -273,6 +282,60 @@ namespace Tanks2D.EditorTools
             if (!Mathf.Approximately(property.floatValue, oldValue)) return false;
             property.floatValue = newValue;
             return true;
+        }
+
+        // ---------------------------------------------------------------- Йог-Сотот (мини-босс уровней 4+)
+
+        private const int YogFirstLevel = 4;
+
+        private static void EnsureYogSothoth()
+        {
+            string tentaclePath = $"{PrefabFolder}/Tentacle.prefab";
+            string yogPath = $"{PrefabFolder}/Yog_Sothoth.prefab";
+
+            var prefabs = new Prefabs { DamageText = AssetDatabase.LoadAssetAtPath<GameObject>($"{PrefabFolder}/FloatingText_Damage.prefab") };
+
+            // Щупальце: стоит на месте, уязвимо
+            GameObject tentacle = AssetDatabase.LoadAssetAtPath<GameObject>(tentaclePath);
+            if (tentacle == null)
+            {
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                tentacle = CreateEnemyPrefab("Tentacle", VisualId.Tentacle, 25, 0f, 0, 3, 1f, false, prefabs);
+            }
+
+            // Йог-Сотот: быстрый, неуязвим до гибели щупалец
+            GameObject yog = AssetDatabase.LoadAssetAtPath<GameObject>(yogPath);
+            if (yog == null)
+            {
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                CreateEnemyPrefab("Yog_Sothoth", VisualId.YogSothoth, 150, 4.5f, 15, 25, 0.8f, false, prefabs);
+
+                GameObject root = PrefabUtility.LoadPrefabContents(yogPath);
+                YogSothoth component = root.AddComponent<YogSothoth>();
+                Wire(component, ("_tentaclePrefab", tentacle));
+                PrefabUtility.SaveAsPrefabAsset(root, yogPath);
+                PrefabUtility.UnloadPrefabContents(root);
+                yog = AssetDatabase.LoadAssetAtPath<GameObject>(yogPath);
+            }
+
+            // Добавляем Йога мини-боссом на уровни 4..30 (если его там ещё нет)
+            LevelCatalog catalog = LevelCatalog.Instance;
+            if (catalog == null || yog == null) return;
+
+            foreach (LevelDefinition level in catalog.Levels)
+            {
+                if (level == null || level.levelNumber < YogFirstLevel) continue;
+                if (level.miniBosses.Exists(m => m != null && m.prefab == yog)) continue;
+
+                level.miniBosses.Add(new MiniBossSpawn
+                {
+                    prefab = yog,
+                    afterKills = Mathf.Max(1, level.killsForBoss / 3),
+                    abilities = BossAbility.None,
+                    healthMultiplier = 1f
+                });
+                EditorUtility.SetDirty(level);
+            }
         }
 
         // ---------------------------------------------------------------- Лобби: выбор скина оружия

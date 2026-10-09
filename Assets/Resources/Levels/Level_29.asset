@@ -22,4 +22,8 @@ MonoBehaviour:
   bossAbilities: 7
   bossHealthMultiplier: 1
   bossIntroDialogue: []
-  miniBosses: []
+  miniBosses:
+  - prefab: {fileID: 3336297111332816479, guid: 089903e54f867f144b54283c40ff1790, type: 3}
+    afterKills: 283
+    abilities: 0
+    healthMultiplier: 1

@@ -32,7 +32,9 @@ namespace Tanks2D
         ElementFire,
         ElementIce,
         ElementWind,
-        ElementEarth
+        ElementEarth,
+        YogSothoth,
+        Tentacle
     }
 
     public enum PlaceholderShape

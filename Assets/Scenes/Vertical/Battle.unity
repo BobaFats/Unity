@@ -9159,7 +9159,7 @@ MonoBehaviour:
   _maxDoublings: 6
   _maxAliveEnemies: 80
   _spawnDuringBoss: 0
-  _clearEnemiesOnBoss: 1
+  _clearEnemiesOnBoss: 0
   _spawnWidth: 7.6
   _horizontalMargin: 0.7
   _alwaysAboveScreen: 1

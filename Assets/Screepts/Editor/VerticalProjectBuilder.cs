@@ -241,6 +241,8 @@ namespace Tanks2D.EditorTools
             Add(catalog, VisualId.ElementIce, PlaceholderShape.Diamond, new Color(0.5f, 0.85f, 1f), Vector2.one, "ХОЛ");
             Add(catalog, VisualId.ElementWind, PlaceholderShape.Circle, new Color(0.75f, 1f, 0.75f), Vector2.one, "ВЕТ");
             Add(catalog, VisualId.ElementEarth, PlaceholderShape.Rectangle, new Color(0.85f, 0.65f, 0.35f), Vector2.one, "ЗЕМ");
+            Add(catalog, VisualId.YogSothoth, PlaceholderShape.Circle, new Color(0.45f, 0.2f, 0.65f), new Vector2(1.8f, 1.8f), "ЙОГ");
+            Add(catalog, VisualId.Tentacle, PlaceholderShape.Triangle, new Color(0.45f, 0.8f, 0.45f), new Vector2(0.55f, 1f), "Щ");
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();

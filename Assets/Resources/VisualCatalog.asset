@@ -197,3 +197,19 @@ MonoBehaviour:
     color: {r: 0.85, g: 0.65, b: 0.35, a: 1}
     label: "\u0417\u0415\u041C"
     size: {x: 1, y: 1}
+  - id: 23
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 0.45, g: 0.2, b: 0.65, a: 1}
+    label: "\u0419\u041E\u0413"
+    size: {x: 1.8, y: 1.8}
+  - id: 24
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 2
+    color: {r: 0.45, g: 0.8, b: 0.45, a: 1}
+    label: "\u0429"
+    size: {x: 0.55, y: 1}
