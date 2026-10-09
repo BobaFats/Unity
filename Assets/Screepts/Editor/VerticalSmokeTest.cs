@@ -186,7 +186,7 @@ namespace Tanks2D.EditorTools
                     LevelUpPanel panel = Object.FindAnyObjectByType<LevelUpPanel>();
                     Check(panel != null && panel.IsOpen, "Окно выбора награды открылось");
                     Check(GamePause.IsPaused, "Игра на паузе во время выбора");
-                    Check(panel != null && panel.CurrentChoices.Count > 0 && panel.CurrentChoices.Count <= 4, $"Вариантов: {panel?.CurrentChoices.Count} (не больше 4)");
+                    Check(panel != null && panel.CurrentChoices.Count == 5, $"При новом уровне предлагается 5 вариантов ({panel?.CurrentChoices.Count})");
                     Check(panel != null && !HasElementChoice(panel), "До первого босса стихии не предлагаются");
 
                     int before = GameStats.TowerCount + GameStats.BulletCount + GameStats.BulletDamage;
@@ -195,6 +195,7 @@ namespace Tanks2D.EditorTools
                     Check(GameStats.TowerCount + GameStats.BulletCount + GameStats.BulletDamage > before,
                         $"Награды применились (башен {GameStats.TowerCount}, пуль {GameStats.BulletCount}, урон {GameStats.BulletDamage})");
                     Check(!GamePause.IsPaused, "Пауза снята после выбора");
+                    CheckSkillPool();
 
                     // Пробная пуля летит вверх-влево и должна отскочить от левого борта
                     GameObject bulletPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Vertical/Bullet.prefab");
@@ -266,6 +267,8 @@ namespace Tanks2D.EditorTools
 
                     // Все стихии сразу на одной пуле — без ошибок
                     for (int i = 0; i < 30; i++) ElementSystem.ResolveHit(FindTestEnemy(), 1, Vector2.up);
+                    CheckPierceAndExplosion();
+                    StartBodyProbe();
                     NextStep();
                     break;
                 }
@@ -277,6 +280,7 @@ namespace Tanks2D.EditorTools
                     bool alive = _probeEnemy != null && !_probeEnemy.IsDying;
                     Check(!alive || _probeEnemy.transform.position.y > _probeEnemyY, "Ветер: враг отброшен вверх");
                     Check(!alive || _probeEnemy.CurrentHP < _probeEnemy.MaxHP, "Огонь: горение наносит урон");
+                    CheckBodyProbe();
                     if (_animProbe != null)
                     {
                         Check(_animProbe.Current == CharacterAnimation.Death && _animProbe.GetComponent<VisualSlot>().Renderer.sprite == _animSprites[5],
@@ -455,6 +459,113 @@ namespace Tanks2D.EditorTools
             }
         }
 
+        // ---------------------------------------------------------------- Навыки за уровень
+
+        private static void CheckSkillPool()
+        {
+            ExperienceSystem experience = ExperienceSystem.Instance;
+            MethodInfo addWeapon = experience.GetType().GetMethod("AddWeaponChoices", BindingFlags.Instance | BindingFlags.NonPublic);
+            var choices = new List<UpgradeChoice>();
+            addWeapon.Invoke(experience, new object[] { choices });
+
+            var ids = new HashSet<string>();
+            foreach (UpgradeChoice choice in choices) ids.Add(choice.Id);
+
+            string[] expected = { "damage", "firerate", "reload", "ammo", "pierce", "explosive" };
+            bool all = true;
+            foreach (string id in expected) all &= ids.Contains(id);
+            Check(all && choices.Count >= 8, $"Навыков на выбор: {choices.Count} ({string.Join(", ", ids)})");
+
+            // Каждый новый навык меняет то, что обещает
+            float fireDelay = GameStats.FireDelay, reload = GameStats.ReloadTime;
+            int ammo = GameStats.MaxAmmo, pierce = GameStats.Pierce, explosion = GameStats.ExplosionLevel;
+            foreach (UpgradeChoice choice in choices)
+            {
+                if (choice.Id == "firerate" || choice.Id == "reload" || choice.Id == "ammo" || choice.Id == "pierce" || choice.Id == "explosive") choice.Apply();
+            }
+            Check(GameStats.FireDelay < fireDelay && GameStats.ReloadTime < reload && GameStats.MaxAmmo == ammo + GameStats.AmmoStep
+                  && GameStats.Pierce == pierce + 1 && GameStats.ExplosionLevel == explosion + 1,
+                $"Навыки применяются: задержка {fireDelay:0.00}->{GameStats.FireDelay:0.00}, перезарядка {reload:0.0}->{GameStats.ReloadTime:0.0}, обойма {ammo}->{GameStats.MaxAmmo}, пробивание {GameStats.Pierce}, взрыв {GameStats.ExplosionLevel}");
+
+            // Ремонт стены и сила башен
+            Wall wall = Wall.ActiveInstance;
+            wall.TakeDamage(30);
+            int wallHp = wall.CurrentHP;
+            choices.Clear();
+            addWeapon.Invoke(experience, new object[] { choices });
+            UpgradeChoice repair = choices.Find(c => c.Id == "repair");
+            UpgradeChoice towerPower = choices.Find(c => c.Id == "towerpower");
+            int towerPowerBefore = GameStats.TowerPowerLevel;
+            repair?.Apply();
+            towerPower?.Apply();
+            Check(repair != null && wall.CurrentHP > wallHp, $"Ремонт стены: {wallHp} -> {wall.CurrentHP}");
+            Check(towerPower != null && GameStats.TowerPowerLevel == towerPowerBefore + 1 && GameStats.TowerDamageMultiplier > 1f,
+                $"Сила башен: уровень {towerPowerBefore} -> {GameStats.TowerPowerLevel}, урон башен x{GameStats.TowerDamageMultiplier:0.00}");
+
+            // Пробивание и взрыв не мешают остальным проверкам
+            GameStats.Pierce = 0;
+            GameStats.ExplosionLevel = 0;
+        }
+
+        private static void CheckPierceAndExplosion()
+        {
+            var targets = new List<PigEnemy>();
+            foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss && !enemy.IsDying && targets.Count < 3) targets.Add(enemy);
+            if (targets.Count < 3) { Check(false, "Есть враги для проверки пробивания"); return; }
+
+            GameObject bulletPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Vertical/Bullet.prefab");
+            MethodInfo trigger = typeof(BulletMovement2D).GetMethod("OnTriggerEnter2D", BindingFlags.Instance | BindingFlags.NonPublic);
+
+            // Пробивание 1: первый враг — пуля летит дальше, второй — пуля останавливается
+            GameStats.Pierce = 1;
+            PlayerController2D.SpawnBullet(bulletPrefab, new Vector3(0f, 30f, 0f), Quaternion.identity, 0f, 1);
+            BulletMovement2D bullet = null;
+            foreach (BulletMovement2D b in Object.FindObjectsByType<BulletMovement2D>()) if (b.transform.position.y > 29f) bullet = b;
+            trigger.Invoke(bullet, new object[] { targets[0].GetComponent<Collider2D>() });
+            bool passedFirst = !(bool)GetField(bullet, "_hasHit");
+            trigger.Invoke(bullet, new object[] { targets[1].GetComponent<Collider2D>() });
+            bool stoppedSecond = (bool)GetField(bullet, "_hasHit");
+            Check(passedFirst && stoppedSecond, "Пробивание: пуля прошла сквозь первого врага и остановилась на втором");
+            GameStats.Pierce = 0;
+
+            // Взрыв: сосед рядом с целью тоже получает урон
+            GameStats.ExplosionLevel = 2;
+            PigEnemy target = targets[2];
+            PigEnemy neighbour = FindTestEnemy() == target ? targets[1] : FindTestEnemy();
+            foreach (PigEnemy enemy in PigEnemy.Alive) if (enemy != target && !enemy.IsDying && !enemy.IsBoss) { neighbour = enemy; break; }
+            neighbour.transform.position = target.transform.position + new Vector3(0.4f, 0f, 0f);
+            int neighbourHp = neighbour.CurrentHP;
+
+            PlayerController2D.SpawnBullet(bulletPrefab, new Vector3(0f, 31f, 0f), Quaternion.identity, 0f, 5);
+            foreach (BulletMovement2D b in Object.FindObjectsByType<BulletMovement2D>()) if (b.transform.position.y > 30.5f) bullet = b;
+            trigger.Invoke(bullet, new object[] { target.GetComponent<Collider2D>() });
+            Check(neighbour.IsDying || neighbour.CurrentHP < neighbourHp, $"Взрывные пули задевают соседей (HP соседа {neighbourHp} -> {neighbour.CurrentHP})");
+            GameStats.ExplosionLevel = 0;
+        }
+
+        // ---------------------------------------------------------------- Тело героя за прицелом
+
+        private static void StartBodyProbe()
+        {
+            var player = Object.FindAnyObjectByType<PlayerController2D>();
+            if (player == null) return;
+            Check(player.Body != null, $"Тело героя найдено для поворота ({player.Body?.name ?? "нет"})");
+            SetField(player, "_targetRotation", Quaternion.Euler(0f, 0f, 40f));
+        }
+
+        private static void CheckBodyProbe()
+        {
+            var player = Object.FindAnyObjectByType<PlayerController2D>();
+            if (player == null || player.Body == null) return;
+
+            var baseRotation = (Quaternion)GetField(player, "_bodyBaseRotation");
+            Quaternion expected = Quaternion.Euler(0f, 0f, 40f) * baseRotation;
+            float error = Quaternion.Angle(player.Body.localRotation, expected);
+            Check(Mathf.Abs(player.AimOffsetAngle - 40f) < 1f && error < 1f,
+                $"Тело героя поворачивается вместе с оружием (прицел {player.AimOffsetAngle:0}°, отклонение тела {error:0.0}°)");
+            SetField(player, "_targetRotation", Quaternion.identity);
+        }
+
         // ---------------------------------------------------------------- Йог-Сотот
 
         private static void StartYogTest()
@@ -553,12 +664,14 @@ namespace Tanks2D.EditorTools
                 {
                     if (t < 0.1f) return false;
                     int hp = _yogEnemy.CurrentHP;
-                    _yogEnemy.ApplyDamage(5);
-                    Check(_yog.CurrentState == YogSothoth.State.Vulnerable && _yogEnemy.CurrentHP == hp - 5,
-                        $"После гибели щупалец Йог получает урон (HP {hp} -> {_yogEnemy.CurrentHP})");
-
-                    _yogEnemy.ApplyDamage(10000000);
-                    Check(_yogEnemy.IsDying, "Йог-Сотот уничтожен");
+                    int hits = 0;
+                    while (!_yogEnemy.IsDying && hits < 20)
+                    {
+                        _yogEnemy.ApplyDamage(GameStats.BulletDamage);
+                        hits++;
+                    }
+                    Check(_yog.CurrentState == YogSothoth.State.Vulnerable && _yogEnemy.IsDying && hits <= 3,
+                        $"После гибели щупалец Йог умирает быстро: {hits} попадания по {GameStats.BulletDamage} (HP было {hp})");
                     return true;
                 }
             }

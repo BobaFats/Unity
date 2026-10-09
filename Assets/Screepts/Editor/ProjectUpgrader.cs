@@ -188,6 +188,7 @@ namespace Tanks2D.EditorTools
             }
 
             changed |= RebalanceSpawner();
+            changed |= UpgradeLevelUpWindow(experience);
 
             if (changed) EditorSceneManager.SaveScene(scene);
         }
@@ -282,6 +283,48 @@ namespace Tanks2D.EditorTools
             if (!Mathf.Approximately(property.floatValue, oldValue)) return false;
             property.floatValue = newValue;
             return true;
+        }
+
+        // ---------------------------------------------------------------- Окно наград: 5 вариантов
+
+        private static bool UpgradeLevelUpWindow(ExperienceSystem experience)
+        {
+            if (experience == null) return false;
+            bool changed = false;
+
+            var so = new SerializedObject(experience);
+            SerializedProperty choices = so.FindProperty("_choicesPerLevel");
+            if (choices != null && choices.intValue == 4)
+            {
+                choices.intValue = 5;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                changed = true;
+            }
+
+            LevelUpPanel panel = Object.FindAnyObjectByType<LevelUpPanel>(FindObjectsInactive.Include);
+            Transform window = panel != null ? panel.transform.Find("Panel/Window") : null;
+            if (window == null) return changed;
+
+            var rect = (RectTransform)window;
+            if (Mathf.Approximately(rect.anchorMin.y, 0.2f))
+            {
+                rect.anchorMin = new Vector2(0.04f, 0.08f);
+                rect.anchorMax = new Vector2(0.96f, 0.92f);
+                changed = true;
+            }
+
+            foreach (Transform child in window)
+            {
+                LayoutElement element = child.GetComponent<LayoutElement>();
+                if (element == null || !Mathf.Approximately(element.preferredHeight, 170f)) continue;
+
+                // Заголовок и кнопки вариантов чуть ниже, чтобы влезло 5 штук
+                element.preferredHeight = 150f;
+                element.minHeight = 150f;
+                changed = true;
+            }
+
+            return changed;
         }
 
         // ---------------------------------------------------------------- Йог-Сотот (мини-босс уровней 4+)

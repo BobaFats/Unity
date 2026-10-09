@@ -34,7 +34,10 @@ namespace Tanks2D
         ElementWind,
         ElementEarth,
         YogSothoth,
-        Tentacle
+        Tentacle,
+        IconPierce,
+        IconExplosive,
+        IconTowerPower
     }
 
     public enum PlaceholderShape

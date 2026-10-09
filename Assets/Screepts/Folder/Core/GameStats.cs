@@ -24,6 +24,18 @@ namespace Tanks2D
         public const int XpWallHPStep = 50;
         public const int MaxWallHP = 1000;
 
+        // Навыки за уровень (шаги и пределы)
+        public const float FireDelayStep = 0.9f;      // ×0.9 к задержке выстрела
+        public const float MinFireDelay = 0.12f;
+        public const float ReloadTimeStep = 0.85f;    // ×0.85 к времени перезарядки
+        public const float MinReloadTime = 0.4f;
+        public const int AmmoStep = 5;
+        public const int MaxAmmoLimit = 60;
+        public const int MaxPierce = 5;
+        public const int MaxExplosionLevel = 5;
+        public const int MaxTowerPowerLevel = 5;
+        public const float WallRepairFraction = 0.5f;
+
         // Кампания
         public const int TotalLevels = 30;
 
@@ -37,6 +49,18 @@ namespace Tanks2D
         // Полный угол веера пуль в градусах (имеет смысл при BulletCount > 1)
         public static float SpreadAngle { get; set; }
         public static int TowerCount { get; set; }
+
+        // Сколько врагов пуля пробивает насквозь (0 — исчезает на первом)
+        public static int Pierce { get; set; }
+        // Взрывные пули: 0 — нет, дальше радиус и доля урона растут
+        public static int ExplosionLevel { get; set; }
+        // Сила башен: урон и скорострельность
+        public static int TowerPowerLevel { get; set; }
+
+        public static float ExplosionRadius => ExplosionLevel <= 0 ? 0f : 0.6f + 0.25f * ExplosionLevel;
+        public static float ExplosionDamageFraction => ExplosionLevel <= 0 ? 0f : 0.3f + 0.1f * ExplosionLevel;
+        public static float TowerDamageMultiplier => 1f + 0.25f * TowerPowerLevel;
+        public static float TowerFireDelayMultiplier => Mathf.Pow(0.88f, TowerPowerLevel);
 
         // Опыт
         public static int Level { get; set; }
@@ -72,6 +96,9 @@ namespace Tanks2D
             BulletCount = BaseBulletCount;
             SpreadAngle = BaseSpreadAngle;
             TowerCount = 0;
+            Pierce = 0;
+            ExplosionLevel = 0;
+            TowerPowerLevel = 0;
             Level = 1;
             Experience = 0;
             Mission = 1;

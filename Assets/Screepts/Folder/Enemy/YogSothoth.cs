@@ -28,6 +28,12 @@ namespace Tanks2D
         [Tooltip("Насколько ниже центра Йога (ближе к стене) появляются щупальца")]
         [SerializeField] private float _tentacleOffsetY = 0.9f;
 
+        [Header("После гибели щупалец")]
+        [Tooltip("Сколько попаданий героя добивают Йога, когда щупальца уничтожены")]
+        [SerializeField, Min(1)] private int _hitsToKillWhenVulnerable = 3;
+        [Tooltip("Множитель входящего урона, когда Йог уязвим")]
+        [SerializeField, Min(1f)] private float _vulnerableDamageMultiplier = 5f;
+
         [Header("Атака")]
         [SerializeField] private float _attackInterval = 2f;
         [Tooltip("Сколько секунд башня мигает перед разрушением")]
@@ -143,10 +149,13 @@ namespace Tanks2D
             }
         }
 
+        // Механика разрушения: щупальца — главная преграда, сам Йог после них ложится за пару залпов
         private void BecomeVulnerable()
         {
             _state = State.Vulnerable;
             _enemy.DamageAbsorber = null;
+            _enemy.DamageTakenMultiplier = _vulnerableDamageMultiplier;
+            _enemy.CapHealth(Mathf.CeilToInt(GameStats.BulletDamage * _vulnerableDamageMultiplier * _hitsToKillWhenVulnerable));
         }
 
         private void Attack(Wall wall)

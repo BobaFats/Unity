@@ -47,7 +47,7 @@ namespace Tanks2D
 
         [Header("Выбор награды")]
         [Tooltip("Сколько случайных вариантов показывать при новом уровне")]
-        [SerializeField] private int _choicesPerLevel = 4;
+        [SerializeField] private int _choicesPerLevel = 5;
 
         [Header("References")]
         [SerializeField] private LevelUpPanel _panel;
@@ -251,6 +251,105 @@ namespace Tanks2D
                     Description = $"{GameStats.SpreadAngle:0}° → {next:0}°",
                     Icon = VisualId.IconSpread,
                     Apply = () => GameStats.SpreadAngle = next
+                });
+            }
+
+            AddSkillChoices(list);
+        }
+
+        // Навыки стрельбы, обороны и башен
+        private void AddSkillChoices(List<UpgradeChoice> list)
+        {
+            if (GameStats.FireDelay > GameStats.MinFireDelay + 0.001f)
+            {
+                float next = Mathf.Max(GameStats.MinFireDelay, GameStats.FireDelay * GameStats.FireDelayStep);
+                list.Add(new UpgradeChoice
+                {
+                    Id = "firerate",
+                    Title = "Скорострельность +10%",
+                    Description = $"Задержка выстрела {GameStats.FireDelay:0.00} → {next:0.00} с",
+                    Icon = VisualId.IconFireRate,
+                    Apply = () => GameStats.FireDelay = next
+                });
+            }
+
+            if (GameStats.ReloadTime > GameStats.MinReloadTime + 0.001f)
+            {
+                float next = Mathf.Max(GameStats.MinReloadTime, GameStats.ReloadTime * GameStats.ReloadTimeStep);
+                list.Add(new UpgradeChoice
+                {
+                    Id = "reload",
+                    Title = "Быстрая перезарядка",
+                    Description = $"{GameStats.ReloadTime:0.0} → {next:0.0} с",
+                    Icon = VisualId.IconReload,
+                    Apply = () => GameStats.ReloadTime = next
+                });
+            }
+
+            if (GameStats.MaxAmmo < GameStats.MaxAmmoLimit)
+            {
+                int next = Mathf.Min(GameStats.MaxAmmoLimit, GameStats.MaxAmmo + GameStats.AmmoStep);
+                list.Add(new UpgradeChoice
+                {
+                    Id = "ammo",
+                    Title = $"Обойма +{GameStats.AmmoStep}",
+                    Description = $"{GameStats.MaxAmmo} → {next} патронов",
+                    Icon = VisualId.IconAmmo,
+                    Apply = () => GameStats.MaxAmmo = next
+                });
+            }
+
+            if (GameStats.Pierce < GameStats.MaxPierce)
+            {
+                list.Add(new UpgradeChoice
+                {
+                    Id = "pierce",
+                    Title = "Пробивание",
+                    Description = GameStats.Pierce == 0
+                        ? "Пуля проходит сквозь 1 врага"
+                        : $"Сквозь врагов: {GameStats.Pierce} → {GameStats.Pierce + 1}",
+                    Icon = VisualId.IconPierce,
+                    Apply = () => GameStats.Pierce++
+                });
+            }
+
+            if (GameStats.ExplosionLevel < GameStats.MaxExplosionLevel)
+            {
+                int nextLevel = GameStats.ExplosionLevel + 1;
+                float radius = 0.6f + 0.25f * nextLevel;
+                float fraction = 0.3f + 0.1f * nextLevel;
+                list.Add(new UpgradeChoice
+                {
+                    Id = "explosive",
+                    Title = GameStats.ExplosionLevel == 0 ? "Взрывные пули" : $"Взрывные пули ур. {nextLevel}",
+                    Description = $"{fraction * 100f:0}% урона врагам в радиусе {radius:0.0}",
+                    Icon = VisualId.IconExplosive,
+                    Apply = () => GameStats.ExplosionLevel++
+                });
+            }
+
+            if (Wall.ActiveInstance != null && Wall.ActiveInstance.CurrentHP < GameStats.WallMaxHP)
+            {
+                int heal = Mathf.RoundToInt(GameStats.WallMaxHP * GameStats.WallRepairFraction);
+                list.Add(new UpgradeChoice
+                {
+                    Id = "repair",
+                    Title = "Ремонт стены",
+                    Description = $"+{heal} HP (сейчас {Wall.ActiveInstance.CurrentHP} / {GameStats.WallMaxHP})",
+                    Icon = VisualId.IconWallHP,
+                    Apply = () => { if (Wall.ActiveInstance != null) Wall.ActiveInstance.Repair(heal); }
+                });
+            }
+
+            if (GameStats.TowerCount > 0 && GameStats.TowerPowerLevel < GameStats.MaxTowerPowerLevel)
+            {
+                list.Add(new UpgradeChoice
+                {
+                    Id = "towerpower",
+                    Title = GameStats.TowerPowerLevel == 0 ? "Сила башен" : $"Сила башен ур. {GameStats.TowerPowerLevel + 1}",
+                    Description = "Урон башен +25%, стреляют на 12% чаще",
+                    Icon = VisualId.IconTowerPower,
+                    Apply = () => GameStats.TowerPowerLevel++
                 });
             }
         }

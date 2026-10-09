@@ -234,6 +234,14 @@ public class PigEnemy : MonoBehaviour
 
     // ---------------------------------------------------------------- Урон
 
+    // Срезать текущее здоровье до max (например, Йог после гибели щупалец)
+    public void CapHealth(int max)
+    {
+        if (isDying) return;
+        currentHP = Mathf.Clamp(currentHP, 1, Mathf.Max(1, max));
+        if (healthBar != null) healthBar.SetNormalized((float)currentHP / maxHP);
+    }
+
     public void ApplyDamage(int damage, Color? textColor = null, bool isCrit = false)
     {
         if (isDying) return;

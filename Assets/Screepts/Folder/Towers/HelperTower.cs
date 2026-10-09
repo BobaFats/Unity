@@ -69,10 +69,10 @@ namespace Tanks2D
             Vector3 position = _firePoint != null ? _firePoint.position : _turret.position;
             position.z = 0f;
 
-            int damage = Mathf.Max(1, Mathf.RoundToInt(GameStats.BulletDamage * _damageMultiplier));
+            int damage = Mathf.Max(1, Mathf.RoundToInt(GameStats.BulletDamage * _damageMultiplier * GameStats.TowerDamageMultiplier));
             PlayerController2D.SpawnBullet(_bulletPrefab, position, _turret.rotation, _bulletSpeed, damage);
             if (_animations != null) _animations.Play(CharacterAnimation.Attack);
-            _nextFireTime = Time.time + _fireDelay;
+            _nextFireTime = Time.time + _fireDelay * GameStats.TowerFireDelayMultiplier;
         }
 
         // Босс выбрал эту башню: перестаёт стрелять и мигает

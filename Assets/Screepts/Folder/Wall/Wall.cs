@@ -34,6 +34,7 @@ namespace Tanks2D
         private Image _sliderFillImage;
 
         public static Wall ActiveInstance { get; private set; }
+        public int CurrentHP => _currentHP;
         public static bool IsGameOver { get; private set; }
 
         // Верх и ширина берутся по реальной картинке (с учётом её сдвига/масштаба), если она есть
@@ -142,6 +143,14 @@ namespace Tanks2D
 
             if (_currentHP <= 0) TriggerGameOver();
             else if (_animations != null) _animations.Play(CharacterAnimation.Hit);
+        }
+
+        // Частичный ремонт (навык «Ремонт стены»)
+        public void Repair(int amount)
+        {
+            if (IsGameOver || amount <= 0) return;
+            _currentHP = Mathf.Min(GameStats.WallMaxHP, _currentHP + amount);
+            UpdateHPText();
         }
 
         // Вызывается из магазина при покупке улучшения стены: растим максимум и полностью чиним

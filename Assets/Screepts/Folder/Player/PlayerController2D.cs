@@ -11,6 +11,15 @@ namespace Tanks2D
     // Вид оружия задаёт выбранный в лобби скин (WeaponSkinCatalog).
     public class PlayerController2D : MonoBehaviour
     {
+        // Как тело героя следует за прицелом
+        public enum BodyAimMode
+        {
+            None,             // тело не двигается
+            RotateWithWeapon, // тело поворачивается вместе с оружием (вид сверху)
+            TurnToFace3D,     // 3D-модель разворачивается лицом к цели (вокруг вертикальной оси)
+            FlipX             // спрайт отражается влево/вправо
+        }
+
         [Header("References (Ссылки)")]
         [Tooltip("Поворотная часть (ствол). Её ось Y смотрит в направлении выстрела.")]
         [SerializeField] private Transform _turret;
@@ -36,6 +45,17 @@ namespace Tanks2D
         [Tooltip("Насколько плотно оружие следует за точкой крепления (больше — жёстче, меньше — плавнее)")]
         [SerializeField, Min(0f)] private float _followSharpness = 25f;
 
+        [Header("Тело героя следует за прицелом")]
+        [SerializeField] private BodyAimMode _bodyAim = BodyAimMode.RotateWithWeapon;
+        [Tooltip("Что поворачивать. Пусто — модель/картинка героя (Model или Visual)")]
+        [SerializeField] private Transform _body;
+        [Tooltip("Насколько сильно тело поворачивается за прицелом (1 — на весь угол, 0.5 — наполовину)")]
+        [SerializeField, Range(0f, 1f)] private float _bodyFollowAmount = 1f;
+        [Tooltip("Максимальный поворот тела от исходного положения, градусов")]
+        [SerializeField, Range(0f, 180f)] private float _bodyMaxAngle = 80f;
+        [Tooltip("Ось модели, вокруг которой разворачиваться в режиме TurnToFace3D")]
+        [SerializeField] private Vector3 _bodyTurnAxis = Vector3.up;
+
         private Camera _mainCamera;
         private float _nextFireTime;
         private int _currentAmmo;
@@ -45,6 +65,10 @@ namespace Tanks2D
         private Quaternion _targetRotation = Quaternion.identity;
         private Vector3 _mountOffset;
         private bool _hasMount;
+        private Quaternion _bodyBaseRotation = Quaternion.identity;
+        private Vector3 _bodyBaseScale = Vector3.one;
+        private bool _hasBody;
+        private Quaternion _bodyRotationAtMount = Quaternion.identity;
 
         // Исходный вид оружия из сцены — для скина «по умолчанию»
         private bool _weaponDefaultsSaved;
@@ -61,6 +85,9 @@ namespace Tanks2D
         public float ReloadEndTime => _reloadEndTime;
         public Transform Turret => _turret;
         public Transform WeaponMount => _hasMount ? _weaponMount : null;
+        public Transform Body => _hasBody ? _body : null;
+        // Угол прицела от «прямо вверх»: + влево, − вправо
+        public float AimOffsetAngle => Mathf.DeltaAngle(0f, _turret != null ? _turret.eulerAngles.z : 0f);
 
         public float ReloadProgress
         {
@@ -87,7 +114,51 @@ namespace Tanks2D
             }
 
             ApplyWeaponSkin();
+            ResolveBody();
             ResolveMount();
+        }
+
+        // ---------------------------------------------------------------- Тело героя следует за прицелом
+
+        private void ResolveBody()
+        {
+            if (_body == null)
+            {
+                VisualSlot slot = GetComponent<VisualSlot>();
+                _body = slot != null ? slot.ArtRoot : null;
+            }
+
+            _hasBody = _body != null && _body != _turret && !_body.IsChildOf(_turret) && !_turret.IsChildOf(_body);
+            if (!_hasBody) return;
+
+            _bodyBaseRotation = _body.localRotation;
+            _bodyBaseScale = _body.localScale;
+        }
+
+        private void UpdateBody()
+        {
+            if (!_hasBody || _body == null || _bodyAim == BodyAimMode.None) return;
+
+            float angle = Mathf.Clamp(AimOffsetAngle * _bodyFollowAmount, -_bodyMaxAngle, _bodyMaxAngle);
+
+            switch (_bodyAim)
+            {
+                case BodyAimMode.RotateWithWeapon:
+                    _body.localRotation = Quaternion.Euler(0f, 0f, angle) * _bodyBaseRotation;
+                    break;
+
+                case BodyAimMode.TurnToFace3D:
+                    _body.localRotation = _bodyBaseRotation * Quaternion.AngleAxis(-angle, _bodyTurnAxis);
+                    break;
+
+                case BodyAimMode.FlipX:
+                    Vector3 scale = _bodyBaseScale;
+                    if (angle > 0.5f) scale.x = -Mathf.Abs(scale.x);
+                    else if (angle < -0.5f) scale.x = Mathf.Abs(scale.x);
+                    else scale.x = _body.localScale.x;
+                    _body.localScale = scale;
+                    break;
+            }
         }
 
         // ---------------------------------------------------------------- Скин оружия
@@ -132,7 +203,14 @@ namespace Tanks2D
             _hasMount = _weaponMount != null && _turret != transform && !_weaponMount.IsChildOf(_turret);
 
             // Сохраняем текущее положение оружия относительно точки крепления — как его расставили в сцене
-            if (_hasMount) _mountOffset = _turret.position - _weaponMount.position;
+            if (_hasMount) RememberMountOffset();
+        }
+
+        // Смещение оружия от руки запоминается вместе с текущим поворотом тела и дальше поворачивается с ним
+        private void RememberMountOffset()
+        {
+            _mountOffset = _turret.position - _weaponMount.position;
+            _bodyRotationAtMount = _hasBody ? _body.rotation : Quaternion.identity;
         }
 
         private Transform FindBone(Transform root, string boneName)
@@ -153,7 +231,11 @@ namespace Tanks2D
         {
             _weaponMount = mount;
             _hasMount = mount != null && _turret != transform && !mount.IsChildOf(_turret);
-            if (_hasMount) _mountOffset = keepCurrentOffset ? _turret.position - mount.position : Vector3.zero;
+            if (_hasMount)
+            {
+                RememberMountOffset();
+                if (!keepCurrentOffset) _mountOffset = Vector3.zero;
+            }
         }
 
         // После анимаций модели: оружие плавно догоняет руку и плавно поворачивается к прицелу
@@ -168,9 +250,13 @@ namespace Tanks2D
                 ? Quaternion.RotateTowards(_turret.rotation, _targetRotation, _aimSpeed * dt)
                 : _targetRotation;
 
+            // Сначала тело (вместе с ним двигается рука), потом оружие догоняет руку
+            UpdateBody();
+
             if (_hasMount && _weaponMount != null)
             {
-                Vector3 target = _weaponMount.position + _mountOffset;
+                Quaternion bodyTurn = _hasBody ? _body.rotation * Quaternion.Inverse(_bodyRotationAtMount) : Quaternion.identity;
+                Vector3 target = _weaponMount.position + bodyTurn * _mountOffset;
                 target.z = _turret.position.z;
                 float t = _followSharpness > 0f ? 1f - Mathf.Exp(-_followSharpness * dt) : 1f;
                 _turret.position = Vector3.Lerp(_turret.position, target, t);

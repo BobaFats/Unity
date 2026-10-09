@@ -311,9 +311,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
   m_IgnoreLayout: 0
   m_MinWidth: -1
-  m_MinHeight: 170
+  m_MinHeight: 150
   m_PreferredWidth: -1
-  m_PreferredHeight: 170
+  m_PreferredHeight: 150
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
@@ -2174,7 +2174,7 @@ MonoBehaviour:
   _baseXpToLevel: 10
   _xpGrowth: 1.5
   _difficultyExponent: 0.75
-  _choicesPerLevel: 4
+  _choicesPerLevel: 5
   _panel: {fileID: 603879063}
   _towers: {fileID: 728482350}
 --- !u!4 &425930813
@@ -4994,8 +4994,8 @@ RectTransform:
   - {fileID: 21106573}
   m_Father: {fileID: 844181821}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.06, y: 0.2}
-  m_AnchorMax: {x: 0.94, y: 0.8}
+  m_AnchorMin: {x: 0.04, y: 0.08}
+  m_AnchorMax: {x: 0.96, y: 0.92}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -7478,9 +7478,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
   m_IgnoreLayout: 0
   m_MinWidth: -1
-  m_MinHeight: 170
+  m_MinHeight: 150
   m_PreferredWidth: -1
-  m_PreferredHeight: 170
+  m_PreferredHeight: 150
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
@@ -9530,6 +9530,11 @@ MonoBehaviour:
   _autoFindHandBone: 1
   _handBoneName: RightHand
   _followSharpness: 25
+  _bodyAim: 1
+  _body: {fileID: 0}
+  _bodyFollowAmount: 1
+  _bodyMaxAngle: 80
+  _bodyTurnAxis: {x: 0, y: 1, z: 0}
 --- !u!114 &1936403372
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -213,3 +213,27 @@ MonoBehaviour:
     color: {r: 0.45, g: 0.8, b: 0.45, a: 1}
     label: "\u0429"
     size: {x: 0.55, y: 1}
+  - id: 25
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 2
+    color: {r: 0.9, g: 0.9, b: 0.95, a: 1}
+    label: "\u041F\u0420\u0411"
+    size: {x: 1, y: 1}
+  - id: 26
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 1, g: 0.55, b: 0.15, a: 1}
+    label: "\u0412\u0417\u0420"
+    size: {x: 1, y: 1}
+  - id: 27
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 3
+    color: {r: 0.3, g: 0.8, b: 0.75, a: 1}
+    label: "\u0411\u0428+"
+    size: {x: 1, y: 1}
