@@ -11,7 +11,7 @@ namespace Tanks2D
         public const float BaseFireDelay = 0.4f;
         public const float BaseReloadTime = 2.0f;
         public const int BaseMaxAmmo = 15;
-        public const int BaseWallMaxHP = 100;
+        public const int BaseWallMaxHP = 300;
 
         // Оружие и помощники (прокачка за опыт)
         public const int BaseBulletCount = 1;
@@ -19,7 +19,10 @@ namespace Tanks2D
         public const float BaseSpreadAngle = 12f;
         public const float SpreadStep = 8f;
         public const float MaxSpreadAngle = 70f;
-        public const int XpDamageStep = 3;
+        public const int XpDamageStep = 2;            // минимальная прибавка урона за выбор
+        public const float XpDamageMultiplier = 1.2f; // урон ×1.2 за выбор — растёт вместе со здоровьем врагов
+
+        public static int NextDamage(int damage) => Mathf.Max(damage + XpDamageStep, Mathf.RoundToInt(damage * XpDamageMultiplier));
         public const int MaxTowers = 5;
         public const int XpWallHPStep = 50;
         public const int MaxWallHP = 1000;
@@ -74,6 +77,15 @@ namespace Tanks2D
         // Выбранный скин оружия героя (id из WeaponSkinCatalog; пусто — первый в каталоге)
         public static string WeaponSkinId { get; set; }
 
+        // Город, в котором сейчас герой (id из TownCatalog; пусто — город текущего уровня)
+        public static string CurrentTownId { get; set; }
+
+        // Забег: карта городов (см. CampaignRun), подковы из поездок, штраф стене после аварии дилижанса
+        public static RunMap Map { get; set; }
+        public static int Horseshoes { get; set; }
+        // Доля прочности стены, потерянная к началу следующего боя (0.3 = -30%)
+        public static float NextBattleWallDamage { get; set; }
+
         // Уровни стихий пуль по id стихии (0 — не изучена)
         private static readonly Dictionary<string, int> _elementLevels = new Dictionary<string, int>();
 
@@ -104,6 +116,10 @@ namespace Tanks2D
             Mission = 1;
             BossesDefeated = 0;
             CampaignCompleted = false;
+            CurrentTownId = null;
+            Map = null;
+            Horseshoes = 0;
+            NextBattleWallDamage = 0f;
             _elementLevels.Clear();
         }
 

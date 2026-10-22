@@ -246,6 +246,16 @@ namespace Tanks2D.EditorTools
             Add(catalog, VisualId.IconPierce, PlaceholderShape.Triangle, new Color(0.9f, 0.9f, 0.95f), Vector2.one, "ПРБ");
             Add(catalog, VisualId.IconExplosive, PlaceholderShape.Circle, new Color(1f, 0.55f, 0.15f), Vector2.one, "ВЗР");
             Add(catalog, VisualId.IconTowerPower, PlaceholderShape.Diamond, new Color(0.3f, 0.8f, 0.75f), Vector2.one, "БШ+");
+            Add(catalog, VisualId.Npc, PlaceholderShape.Circle, new Color(0.8f, 0.7f, 0.55f), Vector2.one, "ЖИТ");
+            Add(catalog, VisualId.Stagecoach, PlaceholderShape.Rectangle, new Color(0.62f, 0.35f, 0.2f), new Vector2(1.4f, 1.9f), "ДИЛИЖ");
+            Add(catalog, VisualId.RoadLog, PlaceholderShape.Rectangle, new Color(0.45f, 0.3f, 0.15f), new Vector2(1.9f, 0.5f), "БРЕВНО");
+            Add(catalog, VisualId.RoadHole, PlaceholderShape.Circle, new Color(0.18f, 0.14f, 0.1f), new Vector2(1.6f, 0.8f), "ЯМА");
+            Add(catalog, VisualId.RoadRock, PlaceholderShape.Diamond, new Color(0.55f, 0.55f, 0.58f), new Vector2(1.5f, 1.3f), "КАМЕНЬ");
+            Add(catalog, VisualId.RoadTree, PlaceholderShape.Triangle, new Color(0.15f, 0.5f, 0.2f), new Vector2(1.5f, 1.8f), "ДЕРЕВО");
+            Add(catalog, VisualId.RoadGap, PlaceholderShape.Rectangle, new Color(0.15f, 0.3f, 0.6f), new Vector2(8.2f, 0.9f), "ПРОЛОМ — ПРЫГАЙ");
+            Add(catalog, VisualId.Horseshoe, PlaceholderShape.Circle, new Color(1f, 0.82f, 0.2f), new Vector2(0.6f, 0.6f), "П");
+            Add(catalog, VisualId.Traveler, PlaceholderShape.Circle, new Color(0.85f, 0.75f, 0.55f), new Vector2(1f, 1.3f), "ПУТНИК");
+            Add(catalog, VisualId.Signpost, PlaceholderShape.Rectangle, new Color(0.75f, 0.6f, 0.35f), new Vector2(2.3f, 1.2f), "ГОРОД");
 
             EditorUtility.SetDirty(catalog);
             AssetDatabase.SaveAssets();
@@ -311,8 +321,8 @@ namespace Tanks2D.EditorTools
                 Bullet = CreateBulletPrefab()
             };
 
-            prefabs.Pig = CreateEnemyPrefab("Enemy_Pig", VisualId.EnemyPig, 8, 2f, 10, 1, 0f, false, prefabs);
-            prefabs.Chicken = CreateEnemyPrefab("Enemy_Chicken", VisualId.EnemyChicken, 5, 4f, 5, 2, 0f, false, prefabs);
+            prefabs.Pig = CreateEnemyPrefab("Enemy_Pig", VisualId.EnemyPig, 8, 2f, 5, 1, 0f, false, prefabs);
+            prefabs.Chicken = CreateEnemyPrefab("Enemy_Chicken", VisualId.EnemyChicken, 5, 4f, 3, 2, 0f, false, prefabs);
             prefabs.Boss = CreateEnemyPrefab("Boss_Pig", VisualId.Boss, 300, 0.5f, 30, 15, 0.7f, true, prefabs);
             prefabs.Tower = CreateTowerPrefab(prefabs.Bullet);
             return prefabs;
@@ -599,7 +609,8 @@ namespace Tanks2D.EditorTools
 
             Wire(spawner,
                 ("_wall", wall),
-                ("_spawnRate", 1.5f),
+                ("_spawnRate", 2.5f),
+                ("_groupSize", new Vector2Int(2, 4)),
                 ("_spawnWidth", FieldSize.x - 1.4f),
                 ("_bossSpawnPoint", bossPoint),
                 ("bossPrefab", prefabs.Boss),
@@ -607,7 +618,7 @@ namespace Tanks2D.EditorTools
                 ("_doublingPeriod", 60f),
                 ("_maxAliveEnemies", 80),
                 ("_spawnDuringBoss", false),
-                ("_healthGrowthPerMission", 0.3f),
+                ("_healthGrowthPerMission", 0.25f),
                 ("lobbySceneName", LobbySceneName),
                 ("delayBeforeLobby", 1.5f),
                 ("musicAudioSource", music),
@@ -1270,6 +1281,7 @@ namespace Tanks2D.EditorTools
                     case string s: property.stringValue = s; break;
                     case Color c: property.colorValue = c; break;
                     case Vector2 v: property.vector2Value = v; break;
+                    case Vector2Int vi: property.vector2IntValue = vi; break;
                     case Gradient g: property.gradientValue = g; break;
                     default: Debug.LogError($"[Vertical Shooter] Тип {value.GetType()} не поддерживается ({name})"); break;
                 }

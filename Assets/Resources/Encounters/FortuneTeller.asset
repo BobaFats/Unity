@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05cff7f1a8a4dd4478cbf7427467bee1, type: 3}
+  m_Name: FortuneTeller
+  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.EncounterDefinition
+  _id: 
+  title: "\u0413\u0430\u0434\u0430\u043B\u043A\u0430 \u0443 \u0440\u0435\u043A\u0438"
+  text: "\u0413\u0430\u0434\u0430\u043B\u043A\u0430 \u0440\u0430\u0441\u043A\u043B\u0430\u0434\u044B\u0432\u0430\u0435\u0442 \u043A\u0430\u0440\u0442\u044B: \xAB\u041F\u043E\u0437\u043E\u043B\u043E\u0442\u0438 \u0440\u0443\u0447\u043A\u0443 \u2014 \u0441\u043A\u0430\u0436\u0443 \u0441\u0443\u0434\u044C\u0431\u0443\xBB."
+  art: {fileID: 0}
+  placeholderColor: {r: 0.85, g: 0.45, b: 0.4, a: 1}
+  choices:
+  - label: "\u041F\u043E\u0433\u0430\u0434\u0430\u0442\u044C"
+    resultText: 
+    effects: []
+    isGamble: 1
+    chanceCards:
+    - result: 0
+      count: 1
+      text: "\xAB\u0422\u0435\u0431\u044F \u0436\u0434\u0451\u0442 \u0432\u0435\u043B\u0438\u043A\u0430\u044F \u0441\u043B\u0430\u0432\u0430!\xBB \u2014 \u0438 \u043F\u0440\u0430\u0432\u0434\u0430, \u043D\u0430 \u0434\u0443\u0448\u0435 \u043B\u0435\u0433\u0447\u0435."
+      effects:
+      - type: 0
+        amount: 30
+    - result: 1
+      count: 2
+      text: "\u0414\u043E\u0431\u0440\u044B\u0435 \u0441\u043B\u043E\u0432\u0430."
+      effects:
+      - type: 0
+        amount: 15
+    - result: 2
+      count: 2
+      text: "\u0422\u0443\u043C\u0430\u043D\u043D\u043E\u0435 \u043F\u0440\u0435\u0434\u0441\u043A\u0430\u0437\u0430\u043D\u0438\u0435."
+      effects: []
+    - result: 3
+      count: 1
+      text: "\u041F\u043E\u043A\u0430 \u0433\u0430\u0434\u0430\u043B\u0430 \u2014 \u0441\u0442\u0430\u0449\u0438\u043B\u0430 \u043F\u043E\u0434\u043A\u043E\u0432\u044B."
+      effects:
+      - type: 7
+        amount: -3
+    horseshoeCost: 0
+  - label: "\u041E\u0442\u043A\u0430\u0437\u0430\u0442\u044C\u0441\u044F"
+    resultText: "\u0413\u0430\u0434\u0430\u043B\u043A\u0430 \u0447\u0442\u043E-\u0442\u043E \u0431\u043E\u0440\u043C\u043E\u0447\u0435\u0442 \u0432\u0441\u043B\u0435\u0434."
+    effects: []
+    isGamble: 0
+    chanceCards: []
+    horseshoeCost: 0

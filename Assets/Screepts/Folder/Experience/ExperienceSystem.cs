@@ -206,10 +206,10 @@ namespace Tanks2D
             list.Add(new UpgradeChoice
             {
                 Id = "damage",
-                Title = $"Урон +{GameStats.XpDamageStep}",
-                Description = $"{GameStats.BulletDamage} → {GameStats.BulletDamage + GameStats.XpDamageStep}",
+                Title = "Урон +20%",
+                Description = $"{GameStats.BulletDamage} → {GameStats.NextDamage(GameStats.BulletDamage)}",
                 Icon = VisualId.IconDamage,
-                Apply = () => GameStats.BulletDamage += GameStats.XpDamageStep
+                Apply = () => GameStats.BulletDamage = GameStats.NextDamage(GameStats.BulletDamage)
             });
 
             if (GameStats.WallMaxHP < GameStats.MaxWallHP)

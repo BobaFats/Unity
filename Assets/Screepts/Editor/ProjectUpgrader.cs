@@ -43,6 +43,9 @@ namespace Tanks2D.EditorTools
             CreateOrUpdateCatalog();
             EnsureLevels();
             EnsureWeaponSkins();
+            EnsureTowns();
+            EnsureVillageScene();
+            EnsureTravel();
             UpgradeBossPrefab();
             RebalanceEnemyPrefabs();
             EnsureYogSothoth();
@@ -188,6 +191,20 @@ namespace Tanks2D.EditorTools
             }
 
             changed |= RebalanceSpawner();
+
+            // После победы над боссом — в деревню (а из неё в лобби)
+            EnemySpawner2D spawnerForFlow = Object.FindAnyObjectByType<EnemySpawner2D>();
+            if (spawnerForFlow != null)
+            {
+                var flow = new SerializedObject(spawnerForFlow);
+                SerializedProperty next = flow.FindProperty("lobbySceneName");
+                if (next != null && next.stringValue == LobbySceneName)
+                {
+                    next.stringValue = VillageSceneName;
+                    flow.ApplyModifiedPropertiesWithoutUndo();
+                    changed = true;
+                }
+            }
             changed |= UpgradeLevelUpWindow(experience);
 
             if (changed) EditorSceneManager.SaveScene(scene);
@@ -343,7 +360,7 @@ namespace Tanks2D.EditorTools
             if (tentacle == null)
             {
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-                tentacle = CreateEnemyPrefab("Tentacle", VisualId.Tentacle, 25, 0f, 0, 3, 1f, false, prefabs);
+                tentacle = CreateEnemyPrefab("Tentacle", VisualId.Tentacle, 12, 0f, 0, 3, 1f, false, prefabs);
             }
 
             // Йог-Сотот: быстрый, неуязвим до гибели щупалец
@@ -351,7 +368,7 @@ namespace Tanks2D.EditorTools
             if (yog == null)
             {
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-                CreateEnemyPrefab("Yog_Sothoth", VisualId.YogSothoth, 150, 4.5f, 15, 25, 0.8f, false, prefabs);
+                CreateEnemyPrefab("Yog_Sothoth", VisualId.YogSothoth, 150, 4.5f, 8, 25, 0.8f, false, prefabs);
 
                 GameObject root = PrefabUtility.LoadPrefabContents(yogPath);
                 YogSothoth component = root.AddComponent<YogSothoth>();

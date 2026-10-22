@@ -79,7 +79,7 @@ namespace Tanks2D
         [FormerlySerializedAs("campSceneName")]
         [SerializeField] private string lobbySceneName = "Lobby";
         [FormerlySerializedAs("delayBeforeCamp")]
-        [Tooltip("Пауза после выбора награды за босса перед переходом в лобби, сек.")]
+        [Tooltip("Пауза после выбора награды за босса перед переходом (в деревню), сек.")]
         [SerializeField] private float delayBeforeLobby = 1.5f;
 
         [Header("Music Settings (Настройки музыки)")]

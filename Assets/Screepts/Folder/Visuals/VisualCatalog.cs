@@ -37,7 +37,17 @@ namespace Tanks2D
         Tentacle,
         IconPierce,
         IconExplosive,
-        IconTowerPower
+        IconTowerPower,
+        Npc,
+        Stagecoach,
+        RoadLog,
+        RoadHole,
+        RoadRock,
+        RoadTree,
+        RoadGap,
+        Horseshoe,
+        Traveler,
+        Signpost
     }
 
     public enum PlaceholderShape

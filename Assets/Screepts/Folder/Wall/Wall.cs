@@ -94,6 +94,14 @@ namespace Tanks2D
             if (_animations == null) _animations = GetComponent<CharacterAnimations>();
 
             _currentHP = GameStats.WallMaxHP;
+
+            // Дилижанс доехал без колёс — стена начинает бой повреждённой
+            if (GameStats.NextBattleWallDamage > 0f)
+            {
+                _currentHP = Mathf.Max(1, Mathf.RoundToInt(GameStats.WallMaxHP * (1f - GameStats.NextBattleWallDamage)));
+                GameStats.NextBattleWallDamage = 0f;
+            }
+
             _visualHP = _currentHP;
 
             if (wallHPSlider != null)

@@ -237,3 +237,83 @@ MonoBehaviour:
     color: {r: 0.3, g: 0.8, b: 0.75, a: 1}
     label: "\u0411\u0428+"
     size: {x: 1, y: 1}
+  - id: 28
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 0.8, g: 0.7, b: 0.55, a: 1}
+    label: "\u0416\u0418\u0422"
+    size: {x: 1, y: 1}
+  - id: 29
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 0
+    color: {r: 0.62, g: 0.35, b: 0.2, a: 1}
+    label: "\u0414\u0418\u041B\u0418\u0416"
+    size: {x: 1.4, y: 1.9}
+  - id: 30
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 0
+    color: {r: 0.45, g: 0.3, b: 0.15, a: 1}
+    label: "\u0411\u0420\u0415\u0412\u041D\u041E"
+    size: {x: 1.9, y: 0.5}
+  - id: 31
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 0.18, g: 0.14, b: 0.1, a: 1}
+    label: "\u042F\u041C\u0410"
+    size: {x: 1.6, y: 0.8}
+  - id: 32
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 3
+    color: {r: 0.55, g: 0.55, b: 0.58, a: 1}
+    label: "\u041A\u0410\u041C\u0415\u041D\u042C"
+    size: {x: 1.5, y: 1.3}
+  - id: 33
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 2
+    color: {r: 0.15, g: 0.5, b: 0.2, a: 1}
+    label: "\u0414\u0415\u0420\u0415\u0412\u041E"
+    size: {x: 1.5, y: 1.8}
+  - id: 34
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 0
+    color: {r: 0.15, g: 0.3, b: 0.6, a: 1}
+    label: "\u041F\u0420\u041E\u041B\u041E\u041C \u2014 \u041F\u0420\u042B\u0413\u0410\u0419"
+    size: {x: 8.2, y: 0.9}
+  - id: 35
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 1, g: 0.82, b: 0.2, a: 1}
+    label: "\u041F"
+    size: {x: 0.6, y: 0.6}
+  - id: 36
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 1
+    color: {r: 0.85, g: 0.75, b: 0.55, a: 1}
+    label: "\u041F\u0423\u0422\u041D\u0418\u041A"
+    size: {x: 1, y: 1.3}
+  - id: 37
+    sprite: {fileID: 0}
+    prefab: {fileID: 0}
+    animator: {fileID: 0}
+    shape: 0
+    color: {r: 0.75, g: 0.6, b: 0.35, a: 1}
+    label: "\u0413\u041E\u0420\u041E\u0414"
+    size: {x: 2.3, y: 1.2}

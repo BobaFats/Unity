@@ -36,6 +36,14 @@ namespace Tanks2D
             Apply();
         }
 
+        // Своя картинка из кода (портрет жителя и т.п.); null — снова из каталога
+        public void Configure(VisualId id, Sprite customSprite, bool showLabel = true)
+        {
+            _customSprite = customSprite;
+            _lastAppliedSprite = null;
+            Configure(id, showLabel);
+        }
+
         [ContextMenu("Apply Visual")]
         public void Apply()
         {

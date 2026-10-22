@@ -16,6 +16,8 @@ namespace Tanks2D
         [TextArea] public string text;
         [Tooltip("Портрет справа (обычно герой), иначе слева")]
         public bool rightSide;
+        [Tooltip("Свой портрет (важнее картинки из каталога)")]
+        public Sprite portraitSprite;
     }
 
     // Окно диалога: портрет, имя, текст с эффектом печатной машинки.
@@ -106,8 +108,8 @@ namespace Tanks2D
                 _speakerText.alignment = line.rightSide ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
             }
 
-            SetPortrait(_leftPortrait, !line.rightSide, line.portrait);
-            SetPortrait(_rightPortrait, line.rightSide, line.portrait);
+            SetPortrait(_leftPortrait, !line.rightSide, line.portrait, line.portraitSprite);
+            SetPortrait(_rightPortrait, line.rightSide, line.portrait, line.portraitSprite);
 
             if (_lineText != null)
             {
@@ -117,11 +119,11 @@ namespace Tanks2D
             _visibleCharacters = 0f;
         }
 
-        private static void SetPortrait(UIVisualSlot slot, bool visible, VisualId id)
+        private static void SetPortrait(UIVisualSlot slot, bool visible, VisualId id, Sprite sprite)
         {
             if (slot == null) return;
             slot.gameObject.SetActive(visible);
-            if (visible) slot.Configure(id);
+            if (visible) slot.Configure(id, sprite);
         }
 
         private void Close()

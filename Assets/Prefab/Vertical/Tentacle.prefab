@@ -427,7 +427,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dbb7bac171cbcb840b15d4c808a18137, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PigEnemy
-  maxHP: 25
+  maxHP: 12
   speed: 0
   knockbackResistance: 1
   knockbackSpeed: 8

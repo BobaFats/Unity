@@ -524,7 +524,7 @@ MonoBehaviour:
   speed: 4.5
   knockbackResistance: 0.8
   knockbackSpeed: 8
-  attackDamage: 15
+  attackDamage: 8
   attackRate: 1.5
   attackDistance: 0.05
   xpReward: 25

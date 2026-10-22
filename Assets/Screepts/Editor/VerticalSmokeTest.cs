@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace Tanks2D.EditorTools
 {
@@ -39,6 +40,13 @@ namespace Tanks2D.EditorTools
         private static Transform _mountProbe;
         private static Transform _originalMount;
         private static Vector3 _originalTurretPosition;
+        private static int _tripPhase;
+        private static float _tripPhaseTime;
+        private static int _plannedOption;
+        private static string _startTownId;
+        private static float _rockDistance;
+        private static float _logDistance;
+        private static bool _jumpedLog;
         private static YogSothoth _yog;
         private static PigEnemy _yogEnemy;
         private static int _yogPhase;
@@ -108,6 +116,8 @@ namespace Tanks2D.EditorTools
 
             _retreatSeen = false;
             _shieldTested = false;
+            _tripPhase = 0;
+            _tripPhaseTime = 0f;
             _stepStart = EditorApplication.timeSinceStartup;
 
             Application.logMessageReceived -= OnLog;
@@ -449,14 +459,307 @@ namespace Tanks2D.EditorTools
                     break;
                 }
 
-                case 10: // переход в лобби
+                case 10: // после босса — деревня
+                {
                     AutoChooseLevelUps();
+                    if (SceneManager.GetActiveScene().name != "Village" && Elapsed < 6) return;
+                    Check(SceneManager.GetActiveScene().name == "Village", $"После босса — деревня (сцена {SceneManager.GetActiveScene().name})");
+                    if (Elapsed < 0.5) return;
+
+                    CheckVillage();
+                    NextStep();
+                    break;
+                }
+
+                case 11: // из деревни — в лобби
                     if (SceneManager.GetActiveScene().name != "Lobby" && Elapsed < 6) return;
-                    Check(SceneManager.GetActiveScene().name == "Lobby", $"После босса — лобби (сцена {SceneManager.GetActiveScene().name})");
+                    Check(SceneManager.GetActiveScene().name == "Lobby", $"Кнопка «Продолжить путь» ведёт в лобби (сцена {SceneManager.GetActiveScene().name})");
                     Check(GameObject.Find("StartMissionButton") != null, "В лобби есть кнопка «Начать миссию»");
+                    StartTravelTest();
+                    NextStep();
+                    break;
+
+                case 12: // деревня: уровни города пройдены — путь на карту
+                    if (SceneManager.GetActiveScene().name != "Village" && Elapsed < 6) return;
+                    if (Elapsed < 0.5) return;
+                    CheckVillageLeadsToMap();
+                    NextStep();
+                    break;
+
+                case 13: // карта похода
+                    if (SceneManager.GetActiveScene().name != "Map" && Elapsed < 6) return;
+                    if (Elapsed < 0.5) return;
+                    CheckMapScreen();
+                    NextStep();
+                    break;
+
+                case 14: // дилижанс: управление, авария, встреча
+                    if (SceneManager.GetActiveScene().name != "Stagecoach" && Elapsed < 6) return;
+                    if (Elapsed < 0.5) return;
+                    if (!TickStagecoach()) return;
+                    NextStep();
+                    break;
+
+                case 15: // приезд в новый город
+                    if (SceneManager.GetActiveScene().name != "Village" && Elapsed < 10) return;
+                    if (Elapsed < 0.5) return;
+                    CheckArrival();
                     Finish();
                     break;
             }
+        }
+
+        // ---------------------------------------------------------------- Карта похода и дилижанс
+
+        private static void StartTravelTest()
+        {
+            // Генератор карты: 10 рядов, старт и финал по одному городу, в середине по 2–3, все города достижимы
+            TownCatalog towns = TownCatalog.Instance;
+            Check(towns != null && towns.Towns.Count == 30, $"Пул городов: {towns?.Towns.Count} (нужно 30)");
+
+            bool valid = true;
+            string problem = "";
+            for (int seed = 1; seed <= 50 && valid; seed++)
+            {
+                RunMap test = RunMapGenerator.Generate(seed, towns.Towns);
+                var ids = new HashSet<string>();
+                int total = 0;
+                for (int r = 0; r < test.RowCount; r++)
+                {
+                    int count = test.rows[r].nodes.Count;
+                    bool edgeRow = r == 0 || r == test.RowCount - 1;
+                    if (edgeRow ? count != 1 : count < 2 || count > 3) { valid = false; problem = $"ряд {r}: {count} городов"; }
+
+                    foreach (MapNode node in test.rows[r].nodes)
+                    {
+                        total++;
+                        ids.Add(node.townId);
+                        if (r < test.RowCount - 1 && node.next.Count == 0) { valid = false; problem = $"тупик {r}/{node.index}"; }
+                        if (r > 0)
+                        {
+                            bool reached = false;
+                            foreach (MapNode prev in test.rows[r - 1].nodes) reached |= prev.next.Contains(node.index);
+                            if (!reached) { valid = false; problem = $"недостижим {r}/{node.index}"; }
+                        }
+                    }
+                }
+                if (test.RowCount != 10 || ids.Count != total) { valid = false; problem = $"рядов {test.RowCount}, уникальных городов {ids.Count} из {total}"; }
+            }
+            Check(valid, $"Карта забега: 10 рядов, развилки 2–3, все города достижимы и без повторов (50 карт){(valid ? "" : " — " + problem)}");
+
+            RunMap a = RunMapGenerator.Generate(7, towns.Towns), b = RunMapGenerator.Generate(8, towns.Towns);
+            Check(a.rows[1].nodes[0].townId != b.rows[1].nodes[0].townId || a.rows[2].nodes.Count != b.rows[2].nodes.Count,
+                "Каждый забег — своя карта");
+
+            // Новый забег; пройдены уровни 1–3 первого города — путь лежит в дорогу
+            GameStats.Map = null;
+            GameStats.Mission = 4;
+            GameStats.CurrentTownId = null;
+            _startTownId = CampaignRun.CurrentTown?.Id;
+            SceneManager.LoadScene("Village");
+        }
+
+        private static void CheckVillageLeadsToMap()
+        {
+            var village = Object.FindAnyObjectByType<VillageController>();
+            Check(village != null && village.Town != null && village.Town.Id == _startTownId,
+                $"Деревня стартового города карты ({village?.Town?.displayName})");
+            Check(village != null && village.LeadsToMap, "Уровни города пройдены — «Продолжить» ведёт в дорогу");
+            village?.Continue();
+        }
+
+        private static void CheckMapScreen()
+        {
+            var view = Object.FindAnyObjectByType<RunMapView>();
+            RunMap map = CampaignRun.Map;
+            int total = 0;
+            foreach (MapRow row in map.rows) total += row.nodes.Count;
+            Check(view != null && view.NodeCount == total && view.EdgeCount > 0, $"Карта похода: {view?.NodeCount} городов, {view?.EdgeCount} дорог");
+
+            // Намечаем последний доступный город
+            List<MapNode> options = map.NextOptions;
+            Check(options.Count >= 2, $"Из стартового города {options.Count} дороги");
+            _plannedOption = options.Count - 1;
+            view.Plan(options[_plannedOption]);
+            Check(map.plannedIndex == options[_plannedOption].index, "Город на карте намечается нажатием");
+            view.Travel();
+        }
+
+        // true — проверка дилижанса закончена
+        private static bool TickStagecoach()
+        {
+            StagecoachRun run = StagecoachRun.Instance;
+            if (run == null) { Check(false, "Дилижанс запустился"); return true; }
+            float t = Time.time - _tripPhaseTime;
+
+            switch (_tripPhase)
+            {
+                case 0:
+                    Check(run.Options.Count >= 2 && run.Wheels == 3, $"Поездка: {run.Options.Count} города на развилке, колёс {run.Wheels}");
+                    int lane = run.Lane;
+                    run.ChangeLane(-1);
+                    Check(run.Lane == Mathf.Max(0, lane - 1), "Смена полосы");
+                    run.Jump();
+                    Check(run.IsAirborne, "Прыжок");
+
+                    // Настоящие препятствия в полосе дилижанса: камень (не перепрыгнуть) и бревно (перепрыгнуть)
+                    MethodInfo add = typeof(StagecoachRun).GetMethod("AddObject", BindingFlags.Instance | BindingFlags.NonPublic);
+                    System.Type objectType = typeof(StagecoachRun.RoadObjectType);
+                    _rockDistance = run.Distance + 2f;
+                    _logDistance = run.Distance + 9f;
+                    add.Invoke(run, new object[] { System.Enum.Parse(objectType, "Rock"), run.Lane, _rockDistance });
+                    add.Invoke(run, new object[] { System.Enum.Parse(objectType, "Log"), run.Lane, _logDistance });
+                    _jumpedLog = false;
+                    NextTripPhase();
+                    return false;
+
+                case 1: // камень — минус колесо, бревно в прыжке — без потерь
+                    if (run.Distance < _rockDistance + 0.5f && t < 6f) return false;
+                    if (run.Wheels == 3 || (run.Distance < _logDistance - 1.2f && t < 6f))
+                    {
+                        if (run.Distance >= _rockDistance + 0.5f && run.Wheels == 3) { Check(false, "Камень на полосе отнимает колесо"); NextTripPhase(); }
+                        return false;
+                    }
+                    if (!_jumpedLog)
+                    {
+                        Check(run.Wheels == 2, $"Камень на полосе отнимает колесо (колёс {run.Wheels})");
+                        run.Jump();
+                        _jumpedLog = true;
+                        return false;
+                    }
+                    if (run.Distance < _logDistance + 0.5f && t < 8f) return false;
+                    Check(run.Wheels == 2, $"Бревно перепрыгнуто — колёса целы ({run.Wheels})");
+                    NextTripPhase();
+                    return false;
+
+                case 2: // дорога едет, скорость растёт
+                    Check(run.Distance > 2f, $"Дилижанс едет (проехано {run.Distance:0.0})");
+
+                    // Авария: три удара — колёс нет, стена в следующем бою повреждена
+                    MethodInfo crash = typeof(StagecoachRun).GetMethod("Crash", BindingFlags.Instance | BindingFlags.NonPublic);
+                    for (int i = 0; i < 3; i++) crash.Invoke(run, null);
+                    Check(run.Wheels == 0 && run.IsBrokenDown && GameStats.NextBattleWallDamage > 0f,
+                        $"Без колёс дилижанс едет дальше, но стена пострадает ({GameStats.NextBattleWallDamage * 100:0}%)");
+
+                    // Перематываем к путнику
+                    run.SkipTo(run.TripLength * 0.3f - 0.3f);
+                    NextTripPhase();
+                    return false;
+
+                case 3: // встреча (Hand of Fate)
+                {
+                    EncounterPanel panel = run.Encounters;
+                    if ((panel == null || !panel.IsOpen) && t < 5f) return false;
+                    Check(panel != null && panel.IsOpen && panel.Current != null && GamePause.IsPaused,
+                        $"Встреча в пути: «{panel?.Current?.title}», игра на паузе");
+                    if (panel == null || !panel.IsOpen) { NextTripPhase(); return false; }
+
+                    // Выбираем вариант с риском, если он есть
+                    int gamble = panel.Current.choices.FindIndex(c => c.isGamble);
+                    int choice = gamble >= 0 ? gamble : panel.Current.choices.FindIndex(c => c.horseshoeCost <= GameStats.Horseshoes);
+                    panel.Choose(Mathf.Max(0, choice));
+
+                    if (gamble >= 0)
+                    {
+                        Check(panel.CurrentStage == EncounterPanel.Stage.Chance && panel.ChanceCardCount >= 4,
+                            $"Карты удачи перемешаны рубашкой вверх ({panel.ChanceCardCount})");
+                        panel.PickChance(0);
+                        Check(panel.LastDrawn != null, $"Вытянута карта: {panel.LastDrawn?.result}");
+                    }
+
+                    Check(panel.CurrentStage == EncounterPanel.Stage.Result, "Итог встречи показан");
+                    panel.Continue();
+                    Check(!panel.IsOpen && !GamePause.IsPaused, "Встреча закрыта, дорога продолжается");
+
+                    // Всегда проверяем и риск с картами удачи (встреча в дороге случайная)
+                    EncounterDefinition risky = null;
+                    foreach (EncounterDefinition e in EncounterCatalog.Instance.Encounters) if (risky == null && e.choices.Exists(c => c.isGamble)) risky = e;
+                    panel.Show(risky, null);
+                    panel.Choose(risky.choices.FindIndex(c => c.isGamble));
+                    Check(panel.CurrentStage == EncounterPanel.Stage.Chance && panel.ChanceCardCount >= 4,
+                        $"«{risky.title}»: карты удачи перемешаны рубашкой вверх ({panel.ChanceCardCount})");
+                    panel.PickChance(panel.ChanceCardCount - 1);
+                    Check(panel.LastDrawn != null && panel.CurrentStage == EncounterPanel.Stage.Result, $"Вытянута карта удачи: {panel.LastDrawn?.result}");
+                    panel.Continue();
+
+                    // Эффект колёс от встреч (починка)
+                    EncounterEffects.Apply(new EncounterEffect { type = EncounterEffectType.Wheels, amount = 1 });
+                    Check(run.Wheels == 1, $"Встреча может починить колесо (колёс {run.Wheels})");
+
+                    // К развилке, в полосу намеченного города
+                    int targetLane = run.Options.Count == 2 ? (_plannedOption == 0 ? 0 : 2) : _plannedOption;
+                    while (run.Lane > targetLane) run.ChangeLane(-1);
+                    while (run.Lane < targetLane) run.ChangeLane(1);
+                    run.SkipTo(run.TripLength - 1f);
+                    NextTripPhase();
+                    return false;
+                }
+
+                case 4: // развилка
+                    if (!run.Finished && t < 5f) return false;
+                    Check(run.Finished && run.ChosenOption == _plannedOption, $"Развилка: выбран город по полосе (вариант {run.ChosenOption})");
+                    return true;
+            }
+
+            return true;
+        }
+
+        private static void NextTripPhase()
+        {
+            _tripPhase++;
+            _tripPhaseTime = Time.time;
+        }
+
+        private static void CheckArrival()
+        {
+            RunMap map = CampaignRun.Map;
+            var village = Object.FindAnyObjectByType<VillageController>();
+            Check(map.currentRow == 1 && map.IsVisited(1, map.currentIndex), $"Герой переехал во 2-й ряд карты (город {map.currentIndex})");
+            Check(village != null && village.Town != null && village.Town.Id != _startTownId && village.Town.Id == CampaignRun.CurrentTown.Id,
+                $"Деревня нового города: {village?.Town?.displayName}");
+            Check(village != null && !village.LeadsToMap, "В новом городе «Продолжить» ведёт к бою (уровни 4–6)");
+        }
+
+        // ---------------------------------------------------------------- Деревня
+
+        private static void CheckVillage()
+        {
+            var village = Object.FindAnyObjectByType<VillageController>();
+            Check(village != null && village.Town != null, $"Деревня открылась: {village?.Town?.displayName}");
+            if (village == null || village.Town == null) return;
+
+            TownCatalog towns = TownCatalog.Instance;
+            Check(towns != null && towns.Towns.Count == 30, $"Городов в пуле: {towns?.Towns.Count}");
+            Check(village.Town.Id == CampaignRun.CurrentTown?.Id, "Деревня — город, в котором герой стоит на карте похода");
+
+            int clickable = 0;
+            foreach (Button button in village.BuildingButtons) if (button != null && button.interactable && button.gameObject.activeInHierarchy) clickable++;
+            Check(clickable >= 10, $"В деревне {clickable} кликабельных зданий");
+
+            // Клик по зданию — окно с жителями
+            village.BuildingButtons[0].onClick.Invoke();
+            Check(village.IsBuildingOpen && village.NpcCount > 0,
+                $"Здание «{village.OpenBuildingData?.displayName}» открылось, жителей: {village.NpcCount}");
+
+            // Разговор с жителем
+            village.Talk(0);
+            var dialogue = Object.FindAnyObjectByType<DialoguePanel>();
+            var spoken = new List<string>();
+            int guard = 0;
+            while (dialogue != null && dialogue.IsOpen && guard++ < 20)
+            {
+                DialogueLine line = dialogue.CurrentLine;
+                if (line != null && (spoken.Count == 0 || spoken[spoken.Count - 1] != line.text)) spoken.Add(line.text);
+                dialogue.Next();
+            }
+            string conversation = string.Join(" / ", spoken);
+            Check(conversation == "УУУУУ / ААААА / Спасибо", $"Разговор с квестгивером: {conversation}");
+
+            village.CloseBuilding();
+            Check(!village.IsBuildingOpen, "Окно здания закрывается");
+
+            // Дальше — в лобби
+            GameObject.Find("ContinueButton").GetComponent<Button>().onClick.Invoke();
         }
 
         // ---------------------------------------------------------------- Навыки за уровень
@@ -509,6 +812,14 @@ namespace Tanks2D.EditorTools
 
         private static void CheckPierceAndExplosion()
         {
+            // Нужны минимум 3 живых врага — доспавниваем, если поток сейчас редкий
+            GameObject pig = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Vertical/Enemy_Pig.prefab");
+            MethodInfo spawn = typeof(EnemySpawner2D).GetMethod("Spawn", BindingFlags.Instance | BindingFlags.NonPublic);
+            for (int i = PigEnemy.AliveCount; i < 4; i++)
+            {
+                spawn.Invoke(EnemySpawner2D.Instance, new object[] { pig, new Vector3(-2f + i, 4f, 0f), false, 1f });
+            }
+
             var targets = new List<PigEnemy>();
             foreach (PigEnemy enemy in PigEnemy.Alive) if (!enemy.IsBoss && !enemy.IsDying && targets.Count < 3) targets.Add(enemy);
             if (targets.Count < 3) { Check(false, "Есть враги для проверки пробивания"); return; }
