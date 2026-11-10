@@ -91,6 +91,9 @@ namespace Tanks2D
         // Разрушение: анимация смерти (если есть), затем объект удаляется
         public void Demolish()
         {
+            GameFeel.Shake(GameFeel.ShakeTowerDestroyed);
+            GameFeel.Burst(transform.position, new Color(0.6f, 0.6f, 0.65f), 16, 4f);
+            GameFeel.Vibrate();
             _doomed = true;
             SetColor(_warningColor);
 

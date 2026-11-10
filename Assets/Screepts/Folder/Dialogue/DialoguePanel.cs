@@ -7,20 +7,33 @@ using UnityEngine.UI;
 
 namespace Tanks2D
 {
+    public enum DialogueLineKind
+    {
+        Speech,     // реплика: окно с портретом и именем говорящего
+        Narration   // титр: текст по центру тёмного экрана («Спустя 2 часа...»), без имени и портрета
+    }
+
     [Serializable]
     public class DialogueLine
     {
+        [Tooltip("Реплика — окно с портретом и именем. Титр — текст по центру тёмного экрана («Спустя 2 часа...»): имя и портрет не нужны")]
+        public DialogueLineKind kind;
         public string speaker;
         [Tooltip("Портрет говорящего (из VisualCatalog)")]
         public VisualId portrait = VisualId.Player;
+        [Tooltip("Текст. Ремарки можно выделять курсивом: <i>(в мыслях)</i>")]
         [TextArea] public string text;
         [Tooltip("Портрет справа (обычно герой), иначе слева")]
         public bool rightSide;
         [Tooltip("Свой портрет (важнее картинки из каталога)")]
         public Sprite portraitSprite;
+
+        public bool IsNarration => kind == DialogueLineKind.Narration;
+
+        public DialogueLine Clone() => (DialogueLine)MemberwiseClone();
     }
 
-    // Окно диалога: портрет, имя, текст с эффектом печатной машинки.
+    // Окно диалога: портрет, имя, текст с эффектом печатной машинки. Титры — отдельной карточкой на весь экран.
     // Игра на паузе, пока окно открыто. Далее — тап/клик по экрану, пробел или Enter.
     public class DialoguePanel : MonoBehaviour
     {
@@ -33,14 +46,26 @@ namespace Tanks2D
         [SerializeField] private Button _nextButton;
         [SerializeField] private float _charactersPerSecond = 30f;
 
+        [Header("Титры (не заданы — титр идёт в обычном окне без имени и портрета)")]
+        [Tooltip("Карточка титра на весь экран")]
+        [SerializeField] private GameObject _narrationRoot;
+        [SerializeField] private TextMeshProUGUI _narrationText;
+        [Tooltip("Окно реплик — скрывается, пока на экране титр")]
+        [SerializeField] private GameObject _speechRoot;
+
         private readonly List<DialogueLine> _lines = new List<DialogueLine>();
         private int _index;
         private float _visibleCharacters;
+        private int _totalCharacters;
+        private TextMeshProUGUI _activeText;
         private Action _onComplete;
 
         public bool IsOpen => _root != null && _root.activeSelf;
         public DialogueLine CurrentLine => IsOpen && _index < _lines.Count ? _lines[_index] : null;
-        private bool IsTyping => _lineText != null && _visibleCharacters < _lineText.text.Length;
+        public bool HasNarrationCard => _narrationRoot != null && _narrationText != null;
+        // Сейчас на экране карточка титра (а не окно реплик)
+        public bool IsNarrationShown => IsOpen && HasNarrationCard && _narrationRoot.activeSelf;
+        private bool IsTyping => _activeText != null && _visibleCharacters < _totalCharacters;
 
         private void Awake()
         {
@@ -51,12 +76,16 @@ namespace Tanks2D
         public void Play(IList<DialogueLine> lines, Action onComplete)
         {
             _lines.Clear();
-            if (lines != null) _lines.AddRange(lines);
+            if (lines != null)
+            {
+                foreach (DialogueLine line in lines) if (line != null) _lines.Add(line);
+            }
             _onComplete = onComplete;
             _index = 0;
 
             if (_lines.Count == 0 || _root == null)
             {
+                _onComplete = null;
                 onComplete?.Invoke();
                 return;
             }
@@ -74,7 +103,7 @@ namespace Tanks2D
             {
                 // Печатаем в реальном времени: игра стоит на паузе
                 _visibleCharacters += _charactersPerSecond * Time.unscaledDeltaTime;
-                _lineText.maxVisibleCharacters = Mathf.FloorToInt(_visibleCharacters);
+                _activeText.maxVisibleCharacters = Mathf.FloorToInt(_visibleCharacters);
             }
 
             Keyboard keyboard = Keyboard.current;
@@ -88,8 +117,8 @@ namespace Tanks2D
 
             if (IsTyping)
             {
-                _visibleCharacters = _lineText.text.Length;
-                _lineText.maxVisibleCharacters = _lineText.text.Length;
+                _visibleCharacters = _totalCharacters;
+                _activeText.maxVisibleCharacters = _totalCharacters;
                 return;
             }
 
@@ -101,22 +130,37 @@ namespace Tanks2D
         private void ShowLine()
         {
             DialogueLine line = _lines[_index];
+            bool narration = line.IsNarration;
+            // Титр — на своей карточке; если её в сцене нет, показываем в окне реплик без имени и портрета
+            bool card = narration && HasNarrationCard;
 
-            if (_speakerText != null)
+            if (_narrationRoot != null) _narrationRoot.SetActive(card);
+            if (_speechRoot != null) _speechRoot.SetActive(!card);
+
+            if (!card)
             {
-                _speakerText.text = line.speaker;
-                _speakerText.alignment = line.rightSide ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
+                if (_speakerText != null)
+                {
+                    _speakerText.text = narration ? "" : line.speaker;
+                    _speakerText.alignment = line.rightSide ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
+                }
+
+                SetPortrait(_leftPortrait, !narration && !line.rightSide, line.portrait, line.portraitSprite);
+                SetPortrait(_rightPortrait, !narration && line.rightSide, line.portrait, line.portraitSprite);
             }
 
-            SetPortrait(_leftPortrait, !line.rightSide, line.portrait, line.portraitSprite);
-            SetPortrait(_rightPortrait, line.rightSide, line.portrait, line.portraitSprite);
-
-            if (_lineText != null)
-            {
-                _lineText.text = line.text;
-                _lineText.maxVisibleCharacters = 0;
-            }
+            _activeText = card ? _narrationText : _lineText;
             _visibleCharacters = 0f;
+            _totalCharacters = 0;
+
+            if (_activeText != null)
+            {
+                _activeText.text = line.text;
+                // Считаем видимые символы, а не длину строки: теги оформления (<i>, <b>) не печатаются
+                _activeText.ForceMeshUpdate(true);
+                _totalCharacters = _activeText.textInfo != null ? _activeText.textInfo.characterCount : (line.text ?? "").Length;
+                _activeText.maxVisibleCharacters = 0;
+            }
         }
 
         private static void SetPortrait(UIVisualSlot slot, bool visible, VisualId id, Sprite sprite)

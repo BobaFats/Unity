@@ -4,7 +4,9 @@ using UnityEngine;
 
 namespace Tanks2D
 {
-    // Житель здания — квестгивер
+    // Житель здания — квестгивер.
+    // Задания к жителю привязываются со стороны задания: в ассете QuestDefinition указываются
+    // город, id здания и id жителя (поле «giverNpcId»).
     [Serializable]
     public class NpcDefinition
     {
@@ -14,11 +16,8 @@ namespace Tanks2D
         public Sprite portrait;
         public Color placeholderColor = new Color(0.8f, 0.7f, 0.55f);
 
-        [Tooltip("Разговор с героем. Пусто — стандартный (УУУУУ / ААААА / Спасибо)")]
+        [Tooltip("Разговор с героем, когда у жителя нет задания. Пусто — стандартный (УУУУУ / ААААА / Спасибо)")]
         public List<DialogueLine> dialogue = new List<DialogueLine>();
-
-        [Tooltip("Задания этого жителя (пока не выдаются)")]
-        public List<QuestDefinition> quests = new List<QuestDefinition>();
     }
 
     // Здание на панораме города
@@ -65,6 +64,8 @@ namespace Tanks2D
         [Min(1)] public int lastLevel = 3;
         [Tooltip("Не используется: дороги между городами строит карта забега (RunMapGenerator)")]
         public List<TownDefinition> roadsTo = new List<TownDefinition>();
+        [Tooltip("Сюжетный город: всегда стоит на этом ряду карты забега (0 — стартовый город, 1 — следующий ряд...). -1 — попадает на карту случайно")]
+        [Min(-1)] public int fixedMapRow = -1;
 
         [Header("Здания")]
         public List<BuildingDefinition> buildings = new List<BuildingDefinition>();

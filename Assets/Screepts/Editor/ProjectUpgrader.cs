@@ -46,12 +46,16 @@ namespace Tanks2D.EditorTools
             EnsureTowns();
             EnsureVillageScene();
             EnsureTravel();
+            EnsureQuests();
+            EnsureMeta();
             UpgradeBossPrefab();
             RebalanceEnemyPrefabs();
             EnsureYogSothoth();
             UpgradeBattleScene();
             UpgradeLobbyScene();
             AssetDatabase.SaveAssets();
+            // Арт из Assets/Art, названный как слоты игры, и свежий список «что ещё нужно нарисовать»
+            ArtImporter.ApplyAll();
             Debug.Log("[Vertical Shooter] Обновление проекта завершено");
         }
 
@@ -206,6 +210,7 @@ namespace Tanks2D.EditorTools
                 }
             }
             changed |= UpgradeLevelUpWindow(experience);
+            changed |= UpgradeGameOverButtons();
 
             if (changed) EditorSceneManager.SaveScene(scene);
         }

@@ -1830,7 +1830,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u0412 \u043B\u043E\u0431\u0431\u0438"
+  m_text: "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C \u0443\u0440\u043E\u0432\u0435\u043D\u044C"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -2825,7 +2825,7 @@ GameObject:
   - component: {fileID: 547463805}
   - component: {fileID: 547463804}
   - component: {fileID: 547463803}
-  - component: {fileID: 547463802}
+  - component: {fileID: 547463806}
   m_Layer: 5
   m_Name: NewGameButton
   m_TagString: Untagged
@@ -2853,20 +2853,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &547463802
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 547463800}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c41e88e800133e444948a98d5df5f8f7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.SceneLoadButton
-  _sceneName: Lobby
-  _resetProgress: 1
 --- !u!114 &547463803
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2949,6 +2935,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 547463800}
   m_CullTransparentMesh: 1
+--- !u!114 &547463806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 547463800}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ecbc16f064212ad40a1b022b8df189f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.RunFlowButton
+  _action: 1
+  _battleScene: Battle
+  _confirmSeconds: 3
 --- !u!1 &558014432
 GameObject:
   m_ObjectHideFlags: 0
@@ -4653,6 +4654,9 @@ MonoBehaviour:
   _rightPortrait: {fileID: 509453058}
   _nextButton: {fileID: 1192802526}
   _charactersPerSecond: 30
+  _narrationRoot: {fileID: 0}
+  _narrationText: {fileID: 0}
+  _speechRoot: {fileID: 0}
 --- !u!1 &887603423
 GameObject:
   m_ObjectHideFlags: 0
@@ -5559,7 +5563,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u041D\u043E\u0432\u0430\u044F \u0438\u0433\u0440\u0430"
+  m_text: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u043F\u043E\u0445\u043E\u0434"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -5820,7 +5824,7 @@ GameObject:
   - component: {fileID: 1052150183}
   - component: {fileID: 1052150182}
   - component: {fileID: 1052150181}
-  - component: {fileID: 1052150180}
+  - component: {fileID: 1052150184}
   m_Layer: 5
   m_Name: LobbyButton
   m_TagString: Untagged
@@ -5848,20 +5852,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1052150180
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1052150178}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c41e88e800133e444948a98d5df5f8f7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.SceneLoadButton
-  _sceneName: Lobby
-  _resetProgress: 0
 --- !u!114 &1052150181
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5944,6 +5934,21 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1052150178}
   m_CullTransparentMesh: 1
+--- !u!114 &1052150184
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1052150178}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ecbc16f064212ad40a1b022b8df189f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Tanks2D.RunFlowButton
+  _action: 0
+  _battleScene: Battle
+  _confirmSeconds: 3
 --- !u!1 &1055914192
 GameObject:
   m_ObjectHideFlags: 0
@@ -9169,12 +9174,14 @@ MonoBehaviour:
   killsNeededForBoss: 150
   _dialoguePanel: {fileID: 882933933}
   _bossIntroDialogue:
-  - speaker: "\u0411\u043E\u0441\u0441"
+  - kind: 0
+    speaker: "\u0411\u043E\u0441\u0441"
     portrait: 7
     text: "\u0410\u0410\u0410, \u041E\u041E\u041E"
     rightSide: 0
     portraitSprite: {fileID: 0}
-  - speaker: "\u0413\u0435\u0440\u043E\u0439"
+  - kind: 0
+    speaker: "\u0413\u0435\u0440\u043E\u0439"
     portrait: 2
     text: "\u042B\u042B\u042B\u042B"
     rightSide: 1
@@ -9184,6 +9191,7 @@ MonoBehaviour:
   _healthTimeGrowth: 0.4
   _healthGrowthPerPlayerLevel: 0.08
   lobbySceneName: Village
+  _runEndSceneName: RunEnd
   delayBeforeLobby: 1.5
   musicAudioSource: {fileID: 1923201419}
   normalWaveMusic: {fileID: 8300000, guid: 308866a2980fa0e4898bf97204f89442, type: 3}

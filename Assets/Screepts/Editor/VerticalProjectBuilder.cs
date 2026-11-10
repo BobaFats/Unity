@@ -1146,6 +1146,8 @@ namespace Tanks2D.EditorTools
             tmp.fontSizeMin = Mathf.Min(18f, fontSize);
             tmp.fontSizeMax = fontSize;
             tmp.alignment = alignment;
+            // Явно: у текста, созданного внутри выключенного объекта, настройки TMP по умолчанию не применяются
+            tmp.textWrappingMode = TextWrappingModes.Normal;
             tmp.color = Color.white;
             tmp.raycastTarget = false;
             return tmp;

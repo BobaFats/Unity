@@ -141,13 +141,19 @@ namespace Tanks2D
                 // Цифра урона появляется в случайной точке по ширине стены
                 float x = Random.Range(-HalfWidth * 0.8f, HalfWidth * 0.8f);
                 Vector3 spawnPosition = new Vector3(transform.position.x + x, TopY + 0.3f, 0f);
-                GameObject textGo = Instantiate(damageTextPrefab, spawnPosition, Quaternion.identity);
+                GameObject textGo = ObjectPool.Spawn(damageTextPrefab, spawnPosition, Quaternion.identity);
 
                 DamageText damageText = textGo.GetComponent<DamageText>();
                 if (damageText != null) damageText.Setup(damageAmount, textColorForWall);
             }
 
             UpdateHPText();
+
+            // Чем сильнее удар (таран босса), тем сильнее тряска
+            float share = damageAmount / (float)Mathf.Max(1, GameStats.WallMaxHP);
+            GameFeel.Shake(GameFeel.ShakeWallHit, Mathf.Clamp(1f + share * 20f, 1f, 5f));
+            // Вибрация — только на сильный удар (таран босса, Йог), иначе толпа у стены «жужжит» без остановки
+            if (share >= GameFeel.VibrateWallShare) GameFeel.Vibrate();
 
             if (_currentHP <= 0) TriggerGameOver();
             else if (_animations != null) _animations.Play(CharacterAnimation.Hit);

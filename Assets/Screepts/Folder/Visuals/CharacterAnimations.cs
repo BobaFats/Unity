@@ -68,6 +68,8 @@ namespace Tanks2D
         private bool _oneShot;
         private bool _dead;
         private float _time;
+        private bool _restCaptured;
+        private Sprite _restSprite;
 
         private PlayableGraph _graph;
         private AnimationClipPlayable _clipPlayable;
@@ -102,6 +104,18 @@ namespace Tanks2D
 
         public bool Has(CharacterAnimation animation) => GetSlot(animation).HasContent;
 
+        // Персонаж снова в строю (враг из пула): снимаем «смерть», возвращаем исходный кадр
+        public void ResetState()
+        {
+            _dead = false;
+            _oneShot = false;
+            _base = CharacterAnimation.Idle;
+
+            SpriteRenderer target = _visual != null ? _visual.Renderer : null;
+            if (_restCaptured && target != null && _restSprite != null) target.sprite = _restSprite;
+            StartSlot(_base, false);
+        }
+
         // Фоновое (зацикленное) состояние: Idle или Move
         public void SetBase(CharacterAnimation animation)
         {
@@ -128,6 +142,13 @@ namespace Tanks2D
 
         private void StartSlot(CharacterAnimation animation, bool oneShot)
         {
+            // Запоминаем кадр до первой анимации — к нему вернётся ResetState
+            if (!_restCaptured)
+            {
+                _restCaptured = true;
+                _restSprite = _visual != null && _visual.Renderer != null ? _visual.Renderer.sprite : null;
+            }
+
             AnimationSlot slot = GetSlot(animation);
             _current = animation;
             _oneShot = oneShot && slot.HasContent;

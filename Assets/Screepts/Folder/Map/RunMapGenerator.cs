@@ -6,7 +6,8 @@ namespace Tanks2D
     // Генерация карты забега:
     //   ряд 0 — стартовый город, ряды 1..N-2 — по 2–3 города, последний ряд — финальная цитадель;
     //   дороги только в соседний ряд и без пересечений; у каждого города есть вход и выход;
-    //   города берутся из пула (TownCatalog, 30 штук) без повторов.
+    //   города берутся из пула (TownCatalog, 30 штук) без повторов;
+    //   сюжетные города (TownDefinition.fixedMapRow) всегда стоят на своём ряду — на них держатся задания.
     public static class RunMapGenerator
     {
         public const int DefaultRows = 10;
@@ -81,7 +82,8 @@ namespace Tanks2D
             if (!node.next.Contains(target)) node.next.Add(target);
         }
 
-        // Города из пула без повторов (в пуле 30, на карте не больше 26)
+        // Города из пула без повторов (в пуле 30, на карте не больше 26).
+        // Сюжетные города (TownDefinition.fixedMapRow) всегда встают на свой ряд, остальные — случайно.
         private static void AssignTowns(RunMap map, IReadOnlyList<TownDefinition> pool, System.Random random)
         {
             var towns = new List<TownDefinition>();
@@ -93,15 +95,36 @@ namespace Tanks2D
                 (towns[i], towns[j]) = (towns[j], towns[i]);
             }
 
+            // Сначала сюжетные города — в случайный свободный город своего ряда
+            var free = new List<TownDefinition>();
+            foreach (TownDefinition town in towns)
+            {
+                MapNode node = town.fixedMapRow >= 0 ? RandomFreeNode(map, town.fixedMapRow, random) : null;
+                if (node != null) node.townId = town.Id;
+                else free.Add(town);
+            }
+
+            // Остальные — по порядку из перемешанного пула (если пул мал, города повторяются)
+            List<TownDefinition> rest = free.Count > 0 ? free : towns;
             int next = 0;
             foreach (MapRow row in map.rows)
             {
                 foreach (MapNode node in row.nodes)
                 {
-                    node.townId = towns.Count > 0 ? towns[next % towns.Count].Id : null;
+                    if (node.townId != null) continue;
+                    node.townId = rest.Count > 0 ? rest[next % rest.Count].Id : null;
                     next++;
                 }
             }
+        }
+
+        private static MapNode RandomFreeNode(RunMap map, int row, System.Random random)
+        {
+            if (row >= map.rows.Count) return null;
+
+            var candidates = new List<MapNode>();
+            foreach (MapNode node in map.rows[row].nodes) if (node.townId == null) candidates.Add(node);
+            return candidates.Count > 0 ? candidates[random.Next(candidates.Count)] : null;
         }
     }
 }

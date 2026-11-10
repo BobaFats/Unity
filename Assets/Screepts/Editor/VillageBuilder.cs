@@ -25,12 +25,20 @@ namespace Tanks2D.EditorTools
 
         private static readonly string[] TownNames =
         {
-            "Кастель", "Ромбург", "Сосновый Бор", "Речной Брод", "Каменный Перевал",
+            "Старый Сарай", "Новый Сарай", "Сосновый Бор", "Речной Брод", "Каменный Перевал",
             "Туманная Гавань", "Пепельный Холм", "Северная Застава", "Золотой Колос", "Чёрная Цитадель",
             "Вербная Слобода", "Медный Яр", "Старый Мост", "Белая Пристань", "Волчья Падь",
             "Ясногорье", "Дубрава", "Солёный Берег", "Кленовый Двор", "Гнилые Топи",
             "Орлиное Гнездо", "Тихая Заводь", "Ржавый Рудник", "Лунная Роща", "Высокий Престол",
             "Кривая Мельница", "Звонница", "Ледяной Кряж", "Сады Аркадии", "Последний Оплот"
+        };
+
+        // Сюжетные города: на них держатся задания, поэтому на карте забега они всегда стоят на своём ряду
+        // (0 — стартовый город). oldName — прежнее имя-заглушка: по нему обновление узнаёт город, который ещё не трогали руками.
+        private static readonly (int number, string oldName, int mapRow)[] StoryTowns =
+        {
+            (1, "Кастель", 0), // Старый Сарай — отсюда начинается забег
+            (2, "Ромбург", 1)  // Новый Сарай — один из городов первой развилки
         };
 
         // ---------------------------------------------------------------- Города
@@ -55,7 +63,19 @@ namespace Tanks2D.EditorTools
                     town.firstLevel = (i % 10) * LevelsPerTown + 1;
                     town.lastLevel = Mathf.Min(GameStats.TotalLevels, (i % 10 + 1) * LevelsPerTown);
                     town.buildings = CreateDefaultBuildings();
+                    foreach ((int number, string _, int mapRow) in StoryTowns) if (number == i + 1) town.fixedMapRow = mapRow;
                     AssetDatabase.CreateAsset(town, path);
+                }
+                else
+                {
+                    // Город создан раньше и его имя ещё не меняли — делаем сюжетным
+                    foreach ((int number, string oldName, int mapRow) in StoryTowns)
+                    {
+                        if (number != i + 1 || town.displayName != oldName) continue;
+                        town.displayName = TownNames[i];
+                        town.fixedMapRow = mapRow;
+                        EditorUtility.SetDirty(town);
+                    }
                 }
 
                 towns.Add(town);

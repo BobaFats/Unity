@@ -108,6 +108,8 @@ namespace Tanks2D.EditorTools
 
         private static void BeginChecks()
         {
+            // Сохранения теста — во временной папке, не в сохранениях игрока
+            SaveSystem.UseTemporaryFolder("SmokeSaves");
             _failures.Clear();
             _report.Clear();
             _step = 0;
@@ -175,6 +177,9 @@ namespace Tanks2D.EditorTools
                     CheckVisualOverrides();
                     CheckLevelsAndExperience();
                     CheckWeaponSkins();
+                    CheckQuestRules();
+                    CheckArtSlots();
+                    CheckGameOverButtons();
 
                     var pause = Object.FindAnyObjectByType<PauseMenu>();
                     Check(pause != null, "Есть меню паузы");
@@ -353,6 +358,7 @@ namespace Tanks2D.EditorTools
                         if (Mathf.Abs(enemy.transform.position.x - spawner.transform.position.x) > 3.81f) onSpawnLine = false;
                     }
                     Check(onSpawnLine, "Враги появляются в пределах линии спавна");
+                    CheckEnemyPool();
 
                     Transform bossPoint = spawner.transform.Find("BossSpawnPoint");
                     if (bossPoint != null) bossPoint.position = new Vector3(2f, bossPoint.position.y, 0f);
@@ -438,6 +444,9 @@ namespace Tanks2D.EditorTools
                     Check(abilities.TowersDestroyed > 0 && GameStats.TowerCount == _towersAtBossSpawn - abilities.TowersDestroyed,
                         $"Босс ур. 2 разрушает башни (разрушено {abilities.TowersDestroyed}, башен было {_towersAtBossSpawn}, осталось {GameStats.TowerCount})");
 
+                    Check(GameFeel.ShakeCount > 0 && GameFeel.BurstCount > 0 && Camera.main.GetComponent<CameraShake>() != null,
+                        $"Ощущение от ударов: тряска камеры ({GameFeel.ShakeCount} раз), осколки ({GameFeel.BurstCount} вспышек)");
+
                     // Стихии были прокачаны до максимума в проверке выше — сбрасываем, чтобы было что предложить
                     foreach (ElementDefinition element in ElementCatalog.Instance.Elements) element.Level = 0;
 
@@ -504,6 +513,43 @@ namespace Tanks2D.EditorTools
                     if (SceneManager.GetActiveScene().name != "Village" && Elapsed < 10) return;
                     if (Elapsed < 0.5) return;
                     CheckArrival();
+                    CheckSaveAndLoad();
+                    // Quest Tester начинает новый забег — после проверки возвращаем сохранённый
+                    CheckQuestTester();
+                    SaveSystem.LoadRun();
+                    SceneManager.LoadScene("Menu");
+                    NextStep();
+                    break;
+
+                case 16: // главное меню: «Продолжить» поднимает забег с диска
+                {
+                    if (SceneManager.GetActiveScene().name != "Menu" && Elapsed < 6) return;
+                    if (Elapsed < 0.5) return;
+                    var menu = Object.FindAnyObjectByType<MainMenuController>();
+                    Button load = GameObject.Find("LoadGameButton")?.GetComponent<Button>();
+                    Check(menu != null && menu.CanContinue && load != null && load.interactable, "В главном меню доступно «Продолжить»");
+                    Check(Object.FindAnyObjectByType<LegacyPanel>() != null && GameObject.Find("LegacyButton") != null, "В главном меню есть «Наследие»");
+                    _savedMission = GameStats.Mission;
+                    GameStats.Mission = 25; // в памяти другое — после «Продолжить» должно вернуться сохранённое
+                    menu?.ContinueGame();
+                    NextStep();
+                    break;
+                }
+
+                case 17:
+                    if (SceneManager.GetActiveScene().name != "Village" && Elapsed < 6) return;
+                    if (Elapsed < 0.5) return;
+                    Check(SceneManager.GetActiveScene().name == "Village" && GameStats.Mission == _savedMission,
+                        $"«Продолжить» вернул забег на тот же экран (сцена {SceneManager.GetActiveScene().name}, уровень {GameStats.Mission})");
+                    _gloryBefore = MetaProgress.Glory;
+                    RunSummary.Finish(false);
+                    NextStep();
+                    break;
+
+                case 18: // итоги забега и наследие
+                    if (SceneManager.GetActiveScene().name != RunSummary.RunEndSceneName && Elapsed < 6) return;
+                    if (Elapsed < 0.5) return;
+                    CheckRunEnd();
                     Finish();
                     break;
             }
@@ -518,10 +564,22 @@ namespace Tanks2D.EditorTools
             Check(towns != null && towns.Towns.Count == 30, $"Пул городов: {towns?.Towns.Count} (нужно 30)");
 
             bool valid = true;
+            bool storyTownsInPlace = true;
             string problem = "";
+            var storyTowns = new List<string>();
+            foreach (TownDefinition town in towns.Towns)
+            {
+                if (town != null && town.fixedMapRow >= 0) storyTowns.Add($"{town.displayName} — ряд {town.fixedMapRow + 1}");
+            }
+
             for (int seed = 1; seed <= 50 && valid; seed++)
             {
                 RunMap test = RunMapGenerator.Generate(seed, towns.Towns);
+                foreach (TownDefinition town in towns.Towns)
+                {
+                    if (town == null || town.fixedMapRow < 0) continue;
+                    storyTownsInPlace &= test.rows[town.fixedMapRow].nodes.Exists(n => n.townId == town.Id);
+                }
                 var ids = new HashSet<string>();
                 int total = 0;
                 for (int r = 0; r < test.RowCount; r++)
@@ -547,9 +605,11 @@ namespace Tanks2D.EditorTools
             }
             Check(valid, $"Карта забега: 10 рядов, развилки 2–3, все города достижимы и без повторов (50 карт){(valid ? "" : " — " + problem)}");
 
+            Check(storyTownsInPlace && storyTowns.Count >= 2,
+                $"Сюжетные города всегда стоят на своих рядах карты ({string.Join(", ", storyTowns)})");
+
             RunMap a = RunMapGenerator.Generate(7, towns.Towns), b = RunMapGenerator.Generate(8, towns.Towns);
-            Check(a.rows[1].nodes[0].townId != b.rows[1].nodes[0].townId || a.rows[2].nodes.Count != b.rows[2].nodes.Count,
-                "Каждый забег — своя карта");
+            Check(MapSignature(a) != MapSignature(b), "Каждый забег — своя карта");
 
             // Новый забег; пройдены уровни 1–3 первого города — путь лежит в дорогу
             GameStats.Map = null;
@@ -557,6 +617,17 @@ namespace Tanks2D.EditorTools
             GameStats.CurrentTownId = null;
             _startTownId = CampaignRun.CurrentTown?.Id;
             SceneManager.LoadScene("Village");
+        }
+
+        private static string MapSignature(RunMap map)
+        {
+            var signature = new StringBuilder();
+            foreach (MapRow row in map.rows)
+            {
+                foreach (MapNode node in row.nodes) signature.Append(node.townId).Append(':').Append(string.Join(",", node.next)).Append(' ');
+                signature.Append('|');
+            }
+            return signature.ToString();
         }
 
         private static void CheckVillageLeadsToMap()
@@ -576,10 +647,17 @@ namespace Tanks2D.EditorTools
             foreach (MapRow row in map.rows) total += row.nodes.Count;
             Check(view != null && view.NodeCount == total && view.EdgeCount > 0, $"Карта похода: {view?.NodeCount} городов, {view?.EdgeCount} дорог");
 
-            // Намечаем последний доступный город
+            // Намечаем город, где ждёт задание (если его нет среди дорог — последний доступный)
             List<MapNode> options = map.NextOptions;
             Check(options.Count >= 2, $"Из стартового города {options.Count} дороги");
+            QuestDefinition quest = QuestCatalog.Instance != null ? QuestCatalog.Instance.Find(QuestId) : null;
             _plannedOption = options.Count - 1;
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (quest != null && quest.town != null && options[i].townId == quest.town.Id) _plannedOption = i;
+            }
+            Check(quest != null && quest.town != null && options[_plannedOption].townId == quest.town.Id,
+                $"С первой развилки есть дорога в город задания «{quest?.town?.displayName}»");
             view.Plan(options[_plannedOption]);
             Check(map.plannedIndex == options[_plannedOption].index, "Город на карте намечается нажатием");
             view.Travel();
@@ -718,6 +796,307 @@ namespace Tanks2D.EditorTools
             Check(village != null && village.Town != null && village.Town.Id != _startTownId && village.Town.Id == CampaignRun.CurrentTown.Id,
                 $"Деревня нового города: {village?.Town?.displayName}");
             Check(village != null && !village.LeadsToMap, "В новом городе «Продолжить» ведёт к бою (уровни 4–6)");
+
+            CheckQuestInVillage(village);
+        }
+
+        // ---------------------------------------------------------------- Сохранение, итоги, наследие
+
+        private static int _savedMission;
+        private static int _gloryBefore;
+
+        private static void CheckGameOverButtons()
+        {
+            var wall = Wall.ActiveInstance;
+            var panel = wall != null ? (GameObject)GetField(wall, "gameOverPanel") : null;
+            RunFlowButton[] buttons = panel != null ? panel.GetComponentsInChildren<RunFlowButton>(true) : new RunFlowButton[0];
+            bool retry = System.Array.Exists(buttons, b => b.Kind == RunFlowButton.Action.RetryLevel);
+            bool finish = System.Array.Exists(buttons, b => b.Kind == RunFlowButton.Action.FinishRun);
+            Check(retry && finish, "Экран поражения: «Повторить уровень» и «Завершить поход»");
+        }
+
+        private static void CheckSaveAndLoad()
+        {
+            RunSaveData saved = SaveSystem.ReadRun();
+            Check(SaveSystem.HasRun && saved != null && saved.scene == "Village" && saved.runId == GameStats.RunId,
+                $"Забег сохранён на диск при входе в деревню ({saved?.scene}, {saved?.savedAt})");
+
+            int mission = GameStats.Mission, horseshoes = GameStats.Horseshoes, row = CampaignRun.Map.currentRow, kills = GameStats.RunKills;
+            string town = CampaignRun.CurrentTown?.Id;
+            int flags = GameStats.StoryFlags.Count;
+
+            // Портим прогресс в памяти — загрузка должна вернуть всё как было
+            GameStats.Mission = 29;
+            GameStats.Horseshoes += 50;
+            GameStats.Map = null;
+            GameStats.SetStoryFlag("smoke_tmp");
+            string scene = SaveSystem.LoadRun();
+
+            Check(scene == "Village" && GameStats.Mission == mission && GameStats.Horseshoes == horseshoes && GameStats.Map != null
+                  && CampaignRun.Map.currentRow == row && CampaignRun.CurrentTown?.Id == town
+                  && GameStats.StoryFlags.Count == flags && !GameStats.HasStoryFlag("smoke_tmp") && GameStats.RunKills == kills,
+                $"Загрузка возвращает прогресс: уровень {GameStats.Mission}, город {CampaignRun.CurrentTown?.displayName}, подковы {GameStats.Horseshoes}, флаги {GameStats.StoryFlags.Count}, убито {GameStats.RunKills}");
+
+            // Брошенный бой откатывается к сохранению, статистика остаётся
+            GameStats.InBattle = true;
+            GameStats.Mission = 17;
+            GameStats.RunKills += 5;
+            bool reverted = SaveSystem.RevertUnfinishedBattle();
+            Check(reverted && GameStats.Mission == mission && GameStats.RunKills == kills + 5 && !GameStats.InBattle,
+                "Брошенный бой (выход или поражение) откатывает прогресс к сохранению перед боем, статистика остаётся");
+
+            GameStats.RunId++;
+            GameStats.InBattle = true;
+            GameStats.Mission = 17;
+            Check(!SaveSystem.RevertUnfinishedBattle() && GameStats.Mission == 17, "Чужое сохранение (другой забег) не подменяет прогресс");
+            GameStats.RunId--;
+            GameStats.Mission = mission;
+        }
+
+        private static void CheckRunEnd()
+        {
+            var screen = Object.FindAnyObjectByType<RunEndScreen>();
+            RunResult result = screen != null ? screen.Result : null;
+            Check(result != null && !result.victory && result.levels >= 3 && result.kills > 0 && result.glory > 0,
+                $"Итоги похода: уровней {result?.levels}, убито {result?.kills}, городов {result?.towns}, заданий {result?.quests}, слава +{result?.glory}");
+            Check(result != null && MetaProgress.Glory == _gloryBefore + result.glory && !SaveSystem.HasRun,
+                $"Слава ушла в наследие ({_gloryBefore} -> {MetaProgress.Glory}), сохранение забега удалено");
+
+            LegacyPanel legacy = Object.FindAnyObjectByType<LegacyPanel>();
+            MetaUpgradeCatalog catalog = MetaUpgradeCatalog.Instance;
+            legacy?.Open();
+            Check(legacy != null && legacy.IsOpen && catalog != null && legacy.Rows.Count == catalog.Upgrades.Count && catalog.Upgrades.Count >= 4,
+                $"Окно «Наследие»: {legacy?.Rows.Count} улучшений");
+
+            MetaProgress.AddGlory(1000);
+            int glory = MetaProgress.Glory;
+            int wallIndex = catalog != null ? new List<MetaUpgrade>(catalog.Upgrades).FindIndex(u => u.effect == MetaEffect.WallHPPercent) : -1;
+            MetaUpgrade wallUpgrade = wallIndex >= 0 ? catalog.Upgrades[wallIndex] : null;
+            bool bought = legacy != null && wallIndex >= 0 && legacy.Buy(wallIndex);
+            Check(bought && MetaProgress.LevelOf(wallUpgrade.id) == 1 && MetaProgress.Glory == glory - wallUpgrade.CostOf(0),
+                $"Улучшение куплено за {wallUpgrade?.CostOf(0)} славы (осталось {MetaProgress.Glory})");
+
+            // Новый забег получает купленное
+            GameStats.ResetAll();
+            catalog?.ApplyToNewRun();
+            int expected = Mathf.RoundToInt(GameStats.BaseWallMaxHP * (1f + (wallUpgrade != null ? wallUpgrade.amountPerLevel : 0) / 100f));
+            Check(GameStats.WallMaxHP == expected && expected > GameStats.BaseWallMaxHP,
+                $"Новый поход начинается с улучшениями наследия (стена {GameStats.WallMaxHP} вместо {GameStats.BaseWallMaxHP})");
+        }
+
+        // Враг из пула возвращается в бой «как новый»
+        private static void CheckEnemyPool()
+        {
+            EnemySpawner2D spawner = EnemySpawner2D.Instance;
+            MethodInfo spawn = typeof(EnemySpawner2D).GetMethod("Spawn", BindingFlags.Instance | BindingFlags.NonPublic);
+            GameObject pig = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/Vertical/Enemy_Pig.prefab");
+
+            var first = (GameObject)spawn.Invoke(spawner, new object[] { pig, new Vector3(0f, 6f, 0f), false, 1f });
+            PigEnemy enemy = first.GetComponent<PigEnemy>();
+            Vector3 scale = first.transform.localScale;
+            enemy.ApplySlow(0.5f, 10f);
+            enemy.ApplyDamage(1000000);
+            first.transform.localScale = scale * 0.3f; // как в конце анимации смерти
+            ObjectPool.Release(first);
+
+            var second = (GameObject)spawn.Invoke(spawner, new object[] { pig, new Vector3(1f, 6f, 0f), false, 2f });
+            PigEnemy reused = second.GetComponent<PigEnemy>();
+            bool collidersOn = System.Array.TrueForAll(second.GetComponentsInChildren<Collider2D>(), c => c.enabled);
+            Check(second == first && !reused.IsDying && reused.CurrentHP == reused.MaxHP && reused.Difficulty > 1.9f && !reused.IsSlowed
+                  && second.transform.localScale == scale && collidersOn && Contains(PigEnemy.Alive, reused),
+                $"Враг из пула вернулся в бой как новый (HP {reused.CurrentHP}/{reused.MaxHP}, сложность x{reused.Difficulty:0.0})");
+            Object.Destroy(second);
+
+            Check(ObjectPool.ReusedCount > 0 && ObjectPool.CreatedCount > 0,
+                $"Пул объектов: создано {ObjectPool.CreatedCount}, взято повторно {ObjectPool.ReusedCount} раз");
+        }
+
+        private static bool Contains(IReadOnlyList<PigEnemy> list, PigEnemy item)
+        {
+            foreach (PigEnemy e in list) if (e == item) return true;
+            return false;
+        }
+
+        // ---------------------------------------------------------------- Задания
+
+        private const string QuestId = "CarlsonJumpsuit";
+
+        // Условия появления и последствия — на пробном задании, чтобы не трогать настоящие
+        private static void CheckQuestRules()
+        {
+            QuestCatalog quests = QuestCatalog.Instance;
+            QuestDefinition quest = quests != null ? quests.Find(QuestId) : null;
+            Check(quest != null && quest.lines.Count > 0, $"В каталоге заданий: {quests?.Quests.Count} (есть «{quest?.title}», {quest?.lines.Count} реплик и титров)");
+            Check(quest != null && quest.town != null && quest.town.fixedMapRow >= 0,
+                $"Задание привязано к сюжетному городу «{quest?.town?.displayName}» (ряд карты {quest?.town?.fixedMapRow + 1})");
+
+            TownCatalog towns = TownCatalog.Instance;
+            if (quest == null || quest.town == null || towns == null) return;
+
+            TownDefinition home = quest.town;
+            TownDefinition elsewhere = null;
+            foreach (TownDefinition town in towns.Towns) if (elsewhere == null && town != null && town != home) elsewhere = town;
+
+            var probe = ScriptableObject.CreateInstance<QuestDefinition>();
+            probe.name = "SmokeTestQuest";
+            probe.town = home;
+            probe.requiredFlags.Add("smoke_need");
+            probe.blockingFlags.Add("smoke_block");
+            probe.setFlags.Add("smoke_done");
+            probe.clearFlags.Add("smoke_need");
+
+            bool withoutFlag = probe.IsAvailableIn(home);
+            GameStats.SetStoryFlag("smoke_need");
+            bool withFlag = probe.IsAvailableIn(home);
+            bool inOtherTown = probe.IsAvailableIn(elsewhere);
+            GameStats.SetStoryFlag("smoke_block");
+            bool blocked = probe.IsAvailableIn(home);
+            GameStats.SetStoryFlag("smoke_block", false);
+            probe.Complete();
+            bool repeated = probe.IsAvailableIn(home);
+
+            Check(!withoutFlag && withFlag && !inOtherTown && !blocked && !repeated,
+                "Задание появляется только в своём городе и при нужных флагах мира, второй раз не выдаётся");
+            Check(GameStats.HasStoryFlag("smoke_done") && !GameStats.HasStoryFlag("smoke_need") && GameStats.IsQuestCompleted(probe.Id),
+                "Выполненное задание выставляет и снимает флаги мира");
+
+            GameStats.SetStoryFlag("smoke_done", false);
+            Object.Destroy(probe);
+        }
+
+        private static void CheckQuestInVillage(VillageController village)
+        {
+            QuestDefinition quest = QuestCatalog.Instance != null ? QuestCatalog.Instance.Find(QuestId) : null;
+            var dialogue = Object.FindAnyObjectByType<DialoguePanel>();
+            if (village == null || village.Town == null || quest == null || dialogue == null)
+            {
+                Check(false, "Задание в деревне можно проверить");
+                return;
+            }
+
+            Check(village.Town == quest.town && Contains(village.AvailableQuests, quest),
+                $"В городе «{village.Town.displayName}» ждёт задание «{quest.title}»");
+
+            int buildingIndex = village.Town.buildings.FindIndex(b => b.id == quest.buildingId);
+            if (buildingIndex < 0 || buildingIndex >= village.BuildingButtons.Count)
+            {
+                Check(false, $"В городе есть здание задания «{quest.buildingId}»");
+                return;
+            }
+
+            Transform marker = village.BuildingButtons[buildingIndex].transform.Find(VillageController.QuestMarkerName);
+            Check(marker != null && marker.gameObject.activeSelf && CountQuestMarkers(village) == 1,
+                $"Метка «!» горит только над зданием с заданием (отмечено зданий: {CountQuestMarkers(village)})");
+
+            village.OpenBuilding(buildingIndex);
+            int residents = village.OpenBuildingData != null ? village.OpenBuildingData.npcs.Count : -1;
+            Check(village.IsBuildingOpen && village.QuestGivers.Count == 1 && village.NpcCount == residents + 1,
+                $"В здании «{village.OpenBuildingData?.displayName}» появился {quest.giverName} с заданием (всего жителей: {village.NpcCount})");
+
+            village.PlayQuestGiver(0);
+            Check(dialogue.IsOpen && village.ActiveQuest == quest && dialogue.HasNarrationCard && GamePause.IsPaused,
+                "Разговор с ним запускает сцену задания");
+
+            // Листаем сцену до конца: реплики идут в окне с портретом, титры — на отдельной карточке
+            int shown = 0, cards = 0, speeches = 0;
+            bool layout = true;
+            DialogueLine last = null;
+            var speakers = new List<string>();
+            int guard = 0;
+            while (dialogue.IsOpen && !GameStats.IsQuestCompleted(quest.Id) && guard++ < 300)
+            {
+                DialogueLine line = dialogue.CurrentLine;
+                if (line != null && line != last)
+                {
+                    last = line;
+                    shown++;
+                    if (line.IsNarration)
+                    {
+                        cards++;
+                        layout &= dialogue.IsNarrationShown;
+                    }
+                    else
+                    {
+                        speeches++;
+                        layout &= !dialogue.IsNarrationShown;
+                        if (!speakers.Contains(line.speaker)) speakers.Add(line.speaker);
+                    }
+                }
+                dialogue.Next();
+            }
+
+            Check(shown == quest.lines.Count && cards > 0 && speeches > 0 && layout,
+                $"Сцена сыграна целиком: {speeches} реплик ({string.Join(", ", speakers)}) и {cards} титров на отдельной карточке");
+            Check(GameStats.IsQuestCompleted(quest.Id) && village.LastCompletedQuest == quest && village.ActiveQuest == null, "Задание засчитано");
+
+            bool flags = quest.setFlags.Count > 0;
+            foreach (string flag in quest.setFlags) flags &= GameStats.HasStoryFlag(flag);
+            Check(flags, $"Последствия записаны во флаги мира: {string.Join(", ", GameStats.StoryFlags)}");
+
+            Check(dialogue.IsOpen && dialogue.IsNarrationShown && dialogue.CurrentLine != null && dialogue.CurrentLine.text.Contains(quest.title),
+                "Показана карточка «Задание выполнено»");
+            guard = 0;
+            while (dialogue.IsOpen && guard++ < 10) dialogue.Next();
+            Check(!dialogue.IsOpen && !GamePause.IsPaused, "После задания игра продолжается");
+
+            Check(village.IsBuildingOpen && village.QuestGivers.Count == 0 && village.NpcCount == residents
+                  && CountQuestMarkers(village) == 0 && !Contains(village.AvailableQuests, quest),
+                $"{quest.giverName} пропал из здания, метка погасла, задание не повторяется");
+            village.CloseBuilding();
+        }
+
+        // Инструмент сценариста: «Играть» в окне Quest Tester ставит героя сразу в город задания
+        private static void CheckQuestTester()
+        {
+            QuestDefinition quest = QuestCatalog.Instance != null ? QuestCatalog.Instance.Find(QuestId) : null;
+            if (quest == null) return;
+
+            bool placed = QuestTestRunner.Prepare(quest);
+            TownDefinition town = CampaignRun.CurrentTown;
+            Check(placed && town == quest.town && quest.IsAvailableIn(town) && GameStats.Mission == RunMap.FirstLevelOfRow(CampaignRun.Map.currentRow),
+                $"Quest Tester ставит героя сразу в город задания ({town?.displayName}, уровень {GameStats.Mission})");
+        }
+
+        private static bool Contains(IReadOnlyList<QuestDefinition> quests, QuestDefinition quest)
+        {
+            foreach (QuestDefinition item in quests) if (item == quest) return true;
+            return false;
+        }
+
+        private static int CountQuestMarkers(VillageController village)
+        {
+            int count = 0;
+            foreach (Button button in village.BuildingButtons)
+            {
+                Transform marker = button.transform.Find(VillageController.QuestMarkerName);
+                if (marker != null && marker.gameObject.activeSelf) count++;
+            }
+            return count;
+        }
+
+        // ---------------------------------------------------------------- Арт: имя файла -> слот
+
+        private static void CheckArtSlots()
+        {
+            ArtImporter.Slot icon = ArtImporter.Resolve("icondamage");
+            ArtImporter.Slot background = ArtImporter.Resolve("Town_5");
+            ArtImporter.Slot building = ArtImporter.Resolve("building_Castle");
+            ArtImporter.Slot townNpc = ArtImporter.Resolve("Town_02_npc_trader");
+            ArtImporter.Slot skinIcon = ArtImporter.Resolve("skin_Golden_icon");
+            ArtImporter.Slot giver = ArtImporter.Resolve("quest_CarlsonJumpsuit");
+
+            Check(icon.kind == ArtImporter.SlotKind.Catalog && icon.visual == VisualId.IconDamage
+                  && background.kind == ArtImporter.SlotKind.TownBackground && background.town == "Town_05"
+                  && building.kind == ArtImporter.SlotKind.Building && building.town == null && building.key == "castle"
+                  && townNpc.kind == ArtImporter.SlotKind.NpcPortrait && townNpc.town == "Town_02" && townNpc.key == "trader"
+                  && skinIcon.kind == ArtImporter.SlotKind.WeaponSkinIcon && skinIcon.key == "Golden"
+                  && giver.kind == ArtImporter.SlotKind.QuestGiver && giver.key == "CarlsonJumpsuit",
+                "Арт: имя файла определяет слот (каталог, фон города, здание, житель, скин, задание)");
+            Check(!ArtImporter.Resolve("my picture").IsValid && !ArtImporter.Resolve("5").IsValid && !ArtImporter.Resolve("Town_x").IsValid
+                  && !ArtImporter.Resolve("Town_03_encounter_Bandits").IsValid,
+                "Арт: посторонние имена ни к чему не подключаются");
+            Check(AssetDatabase.IsValidFolder(ArtImporter.InboxFolder) && System.IO.File.Exists(ArtImporter.ListPath),
+                $"Есть папка для арта {ArtImporter.Root} и список слотов {ArtImporter.ListPath}");
         }
 
         // ---------------------------------------------------------------- Деревня

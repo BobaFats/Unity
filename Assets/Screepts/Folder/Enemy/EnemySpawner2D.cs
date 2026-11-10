@@ -78,6 +78,8 @@ namespace Tanks2D
         [Header("Transition Settings (Переход после победы)")]
         [FormerlySerializedAs("campSceneName")]
         [SerializeField] private string lobbySceneName = "Lobby";
+        [Tooltip("Сцена итогов забега — после босса последнего уровня")]
+        [SerializeField] private string _runEndSceneName = RunSummary.RunEndSceneName;
         [FormerlySerializedAs("delayBeforeCamp")]
         [Tooltip("Пауза после выбора награды за босса перед переходом (в деревню), сек.")]
         [SerializeField] private float delayBeforeLobby = 1.5f;
@@ -94,6 +96,8 @@ namespace Tanks2D
         private bool _isBossDefeated;
         private LevelDefinition _level;
         private readonly HashSet<MiniBossSpawn> _spawnedMiniBosses = new HashSet<MiniBossSpawn>();
+        // Можно ли брать префаб из пула: только простые враги, без способностей босса и Йога
+        private readonly Dictionary<GameObject, bool> _poolable = new Dictionary<GameObject, bool>();
 
         public static EnemySpawner2D Instance { get; private set; }
 
@@ -147,6 +151,8 @@ namespace Tanks2D
             }
 
             _level = LevelCatalog.Current;
+            // Бой начался: если его бросят (выход, поражение), прогресс откатится к сохранению перед боем
+            GameStats.InBattle = true;
             if (_level != null) Debug.Log($"[Spawner] {_level.DisplayName}");
 
             PlayMusic(normalWaveMusic);
@@ -220,6 +226,7 @@ namespace Tanks2D
             if (_clearEnemiesOnBoss) ClearRegularEnemies();
             Debug.Log($"[Spawner] ВНИМАНИЕ! ПОЯВИЛСЯ БОСС ур. {BossLevel}!");
             PlayMusic(bossMusic);
+            GameFeel.Shake(GameFeel.ShakeBossSpawn);
 
             Vector3 point = _bossSpawnPoint != null ? _bossSpawnPoint.position : transform.position;
             float bossHealth = _level != null ? _level.bossHealthMultiplier : 1f;
@@ -254,7 +261,9 @@ namespace Tanks2D
 
         private GameObject Spawn(GameObject prefab, Vector3 position, bool isBoss, float extraHealthMultiplier = 1f)
         {
-            GameObject enemyGo = Instantiate(prefab, position, Quaternion.identity);
+            GameObject enemyGo = !isBoss && IsPoolable(prefab)
+                ? ObjectPool.Spawn(prefab, position, Quaternion.identity)
+                : Instantiate(prefab, position, Quaternion.identity);
 
             PigEnemy enemy = enemyGo.GetComponent<PigEnemy>();
             if (enemy != null)
@@ -264,6 +273,16 @@ namespace Tanks2D
             }
 
             return enemyGo;
+        }
+
+        private bool IsPoolable(GameObject prefab)
+        {
+            if (!_poolable.TryGetValue(prefab, out bool poolable))
+            {
+                poolable = prefab.GetComponent<BossAbilities>() == null && prefab.GetComponent<YogSothoth>() == null;
+                _poolable[prefab] = poolable;
+            }
+            return poolable;
         }
 
         private float GetRandomSpawnX()
@@ -348,6 +367,7 @@ namespace Tanks2D
 
                 _isBossDefeated = true;
                 GameStats.BossesDefeated++;
+                GameStats.InBattle = false;
 
                 // Следующий уровень; после последнего — кампания пройдена (остаёмся на последнем)
                 if (GameStats.Mission >= GameStats.TotalLevels) GameStats.CampaignCompleted = true;
@@ -375,6 +395,14 @@ namespace Tanks2D
         private void LoadLobby()
         {
             GamePause.Clear();
+
+            // Последний уровень пройден — поход окончен победой
+            if (GameStats.CampaignCompleted)
+            {
+                RunSummary.Finish(true, _runEndSceneName);
+                return;
+            }
+
             SceneManager.LoadScene(lobbySceneName);
         }
 

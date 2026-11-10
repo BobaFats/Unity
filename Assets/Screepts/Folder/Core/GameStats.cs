@@ -86,8 +86,23 @@ namespace Tanks2D
         // Доля прочности стены, потерянная к началу следующего боя (0.3 = -30%)
         public static float NextBattleWallDamage { get; set; }
 
+        // Забег: свой номер (сохранение относится только к своему забегу), идёт ли сейчас бой и статистика для итогов
+        public static int RunId { get; set; }
+        public static bool InBattle { get; set; }
+        public static int RunKills { get; set; }
+        public static int RunDefeats { get; set; }
+        public static float RunPlayTime { get; set; }
+
         // Уровни стихий пуль по id стихии (0 — не изучена)
         private static readonly Dictionary<string, int> _elementLevels = new Dictionary<string, int>();
+
+        // Сюжет забега: флаги мира (последствия заданий, по ним задания связаны между собой) и выполненные задания
+        private static readonly HashSet<string> _storyFlags = new HashSet<string>();
+        private static readonly HashSet<string> _completedQuests = new HashSet<string>();
+
+        public static IReadOnlyCollection<string> StoryFlags => _storyFlags;
+        public static IReadOnlyCollection<string> CompletedQuests => _completedQuests;
+        public static IReadOnlyDictionary<string, int> ElementLevels => _elementLevels;
 
         static GameStats()
         {
@@ -120,7 +135,37 @@ namespace Tanks2D
             Map = null;
             Horseshoes = 0;
             NextBattleWallDamage = 0f;
+            RunId = System.Guid.NewGuid().GetHashCode(); // не UnityEngine.Random: ResetAll вызывается и из статического конструктора
+            InBattle = false;
+            RunKills = 0;
+            RunDefeats = 0;
+            RunPlayTime = 0f;
             _elementLevels.Clear();
+            _storyFlags.Clear();
+            _completedQuests.Clear();
+        }
+
+        public static bool HasStoryFlag(string flag)
+        {
+            return !string.IsNullOrWhiteSpace(flag) && _storyFlags.Contains(flag.Trim());
+        }
+
+        public static void SetStoryFlag(string flag, bool value = true)
+        {
+            if (string.IsNullOrWhiteSpace(flag)) return;
+
+            if (value) _storyFlags.Add(flag.Trim());
+            else _storyFlags.Remove(flag.Trim());
+        }
+
+        public static bool IsQuestCompleted(string questId)
+        {
+            return !string.IsNullOrEmpty(questId) && _completedQuests.Contains(questId);
+        }
+
+        public static void CompleteQuest(string questId)
+        {
+            if (!string.IsNullOrEmpty(questId)) _completedQuests.Add(questId);
         }
 
         public static int GetElementLevel(string elementId)

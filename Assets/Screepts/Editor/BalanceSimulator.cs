@@ -101,6 +101,7 @@ namespace Tanks2D.EditorTools
 
         private static void Begin()
         {
+            SaveSystem.UseTemporaryFolder("BalanceSaves");
             GameStats.ResetAll();
             _report.Clear();
             _report.AppendLine("Ур. | время боя | убито | стена (конец, минимум) | ур.героя | урон | пули | башни | итог");

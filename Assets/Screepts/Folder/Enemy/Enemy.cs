@@ -5,7 +5,8 @@ using UnityEngine;
 
 // Враг идёт сверху вниз к стене, останавливается у её верхнего края и бьёт её.
 // Поддерживает эффекты стихий: горение, замедление, отбрасывание.
-public class PigEnemy : MonoBehaviour
+// Обычные враги берутся из пула (ObjectPool): после смерти объект не удаляется, а ждёт следующего появления.
+public class PigEnemy : MonoBehaviour, Tanks2D.IPoolable
 {
     [Header("Health Settings")]
     [SerializeField] private int maxHP = 30;
@@ -43,6 +44,8 @@ public class PigEnemy : MonoBehaviour
     [SerializeField] private Color burnTint = new Color(1f, 0.55f, 0.2f);
 
     private int currentHP;
+    private int _baseMaxHP;
+    private Vector3 _baseScale;
     private float _nextAttackTime;
     private Tanks2D.Wall _targetWall;
     private bool isDying;
@@ -109,6 +112,9 @@ public class PigEnemy : MonoBehaviour
     }
     private Animator CurrentAnimator => visual != null ? visual.Animator : null;
 
+    // Цвет осколков: цвет заглушки или (у своего арта) белый
+    private Color ParticleColor => _baseColor;
+
     public static PigEnemy FindNearest(Vector2 position)
     {
         PigEnemy nearest = null;
@@ -125,6 +131,12 @@ public class PigEnemy : MonoBehaviour
         }
 
         return nearest;
+    }
+
+    private void Awake()
+    {
+        _baseMaxHP = maxHP;
+        _baseScale = transform.localScale;
     }
 
     private void OnEnable()
@@ -146,6 +158,15 @@ public class PigEnemy : MonoBehaviour
     {
         _isBoss = isBoss;
         _healthMultiplier = Mathf.Max(0.1f, healthMultiplier);
+        // Здоровье сразу (враг из пула не ждёт Start — он мог пройти в прошлой жизни)
+        ApplyHealth();
+    }
+
+    private void ApplyHealth()
+    {
+        maxHP = Mathf.Max(1, Mathf.RoundToInt(_baseMaxHP * _healthMultiplier));
+        currentHP = maxHP;
+        if (healthBar != null) healthBar.SetNormalized(1f);
     }
 
     // Разовая анимация: сначала из CharacterAnimations, иначе — триггер Animator Controller (если есть)
@@ -166,10 +187,43 @@ public class PigEnemy : MonoBehaviour
     {
         if (animations == null) animations = GetComponent<Tanks2D.CharacterAnimations>();
         SetBaseAnimation(Tanks2D.CharacterAnimation.Move);
-        maxHP = Mathf.Max(1, Mathf.RoundToInt(maxHP * _healthMultiplier));
-        currentHP = maxHP;
+        ApplyHealth();
         if (visual != null && visual.Renderer != null) _baseColor = visual.Renderer.color;
-        if (healthBar != null) healthBar.SetNormalized(1f);
+    }
+
+    // ---------------------------------------------------------------- Пул
+
+    // Снова в бою: всё, что осталось от прошлой жизни, сбрасывается (объект ещё выключен)
+    public void OnSpawnedFromPool()
+    {
+        isDying = false;
+        _isBoss = false;
+        _healthMultiplier = 1f;
+        _nextAttackTime = 0f;
+        _flashUntil = 0f;
+        _slowFactor = 0f;
+        _slowUntil = 0f;
+        _burnDps = 0f;
+        _burnUntil = 0f;
+        _burnAccumulated = 0f;
+        _knockbackRemaining = 0f;
+        DamageTakenMultiplier = 1f;
+        DamageAbsorber = null;
+        AttackDamageMultiplier = 1f;
+        MovementLocked = false;
+        WallAttacked = null;
+
+        transform.localScale = _baseScale;
+        foreach (Collider2D col in GetComponentsInChildren<Collider2D>(true)) col.enabled = true;
+        if (healthBar != null) healthBar.gameObject.SetActive(true);
+        if (visual != null && visual.Renderer != null) visual.Renderer.color = _baseColor;
+        if (animations != null) animations.ResetState();
+        ApplyHealth();
+    }
+
+    public void OnReturnedToPool()
+    {
+        _alive.Remove(this);
     }
 
     private void Update()
@@ -268,6 +322,7 @@ public class PigEnemy : MonoBehaviour
         currentHP -= damage;
 
         if (healthBar != null) healthBar.SetNormalized((float)currentHP / maxHP);
+        if (damage > 0) Tanks2D.GameFeel.Burst(transform.position, ParticleColor, _isBoss ? 4 : 2, 2.5f);
 
         string text = isCrit ? $"{damage}!" : damage.ToString();
         Color? color = shielded ? new Color(0.6f, 0.75f, 1f) : textColor;
@@ -367,7 +422,7 @@ public class PigEnemy : MonoBehaviour
             yield return null;
         }
 
-        Destroy(gameObject);
+        Tanks2D.ObjectPool.Release(gameObject);
     }
 
     private void Die()
@@ -375,6 +430,14 @@ public class PigEnemy : MonoBehaviour
         if (isDying) return;
         isDying = true;
         _alive.Remove(this);
+        Tanks2D.GameStats.RunKills++;
+
+        Tanks2D.GameFeel.Burst(transform.position, ParticleColor, _isBoss ? 40 : 10, _isBoss ? 6f : 4f);
+        if (_isBoss)
+        {
+            Tanks2D.GameFeel.Shake(Tanks2D.GameFeel.ShakeBossDeath);
+            Tanks2D.GameFeel.Vibrate();
+        }
 
         // Сначала опыт (повышения уровня), потом спавнер (за босса — награда и лобби)
         Tanks2D.ExperienceSystem.AddExperience(Tanks2D.ExperienceSystem.RewardFor(xpReward, Difficulty));
@@ -399,7 +462,7 @@ public class PigEnemy : MonoBehaviour
         if (prefab == null) return;
 
         Vector3 spawnPosition = transform.position + new Vector3(0f, HalfHeight + 0.2f + extraOffsetY, 0f);
-        GameObject textGo = Instantiate(prefab, spawnPosition, Quaternion.identity);
+        GameObject textGo = Tanks2D.ObjectPool.Spawn(prefab, spawnPosition, Quaternion.identity);
 
         DamageText floatingText = textGo.GetComponent<DamageText>();
         if (floatingText != null) floatingText.Setup(text, color);
@@ -444,6 +507,6 @@ public class PigEnemy : MonoBehaviour
             }
         }
 
-        Destroy(gameObject);
+        Tanks2D.ObjectPool.Release(gameObject);
     }
 }

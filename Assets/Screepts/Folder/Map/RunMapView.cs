@@ -51,6 +51,7 @@ namespace Tanks2D
             _map = CampaignRun.Map;
             Build();
             Refresh();
+            SaveSystem.SaveRun("Map");
         }
 
         private void Build()
@@ -137,6 +138,7 @@ namespace Tanks2D
 
             _map.plannedIndex = node.index;
             Refresh();
+            SaveSystem.SaveRun("Map");
         }
 
         private void Refresh()

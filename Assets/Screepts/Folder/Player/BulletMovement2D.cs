@@ -7,8 +7,9 @@ namespace Tanks2D
     // Летит строго по прямой, без самонаведения; от боковых стен поля (коллайдеры Bounds)
     // отскакивает по законам физики — угол падения равен углу отражения.
     // Врагов задевает через триггеры, поэтому от них не отскакивает, а наносит урон и исчезает.
+    // Пули берутся из пула (ObjectPool): «уничтожение» возвращает пулю в пул.
     [RequireComponent(typeof(Rigidbody2D))]
-    public class BulletMovement2D : MonoBehaviour
+    public class BulletMovement2D : MonoBehaviour, IPoolable
     {
         public const string LayerName = "Bullet";
 
@@ -22,6 +23,7 @@ namespace Tanks2D
         private int _bounces;
         private bool _hasHit;
         private int _pierceLeft;
+        private float _age;
         private readonly HashSet<PigEnemy> _hitEnemies = new HashSet<PigEnemy>();
 
         public int PierceLeft => _pierceLeft;
@@ -47,9 +49,29 @@ namespace Tanks2D
             _speed = speed;
             _damage = damage;
             _pierceLeft = GameStats.Pierce;
+            _age = 0f;
+            _body.position = transform.position;
+            _body.rotation = transform.eulerAngles.z;
             _body.linearVelocity = transform.up * speed;
-            Destroy(gameObject, _lifetime);
         }
+
+        public void OnSpawnedFromPool()
+        {
+            _bounces = 0;
+            _hasHit = false;
+            _age = 0f;
+            _hitEnemies.Clear();
+            if (_body == null) _body = GetComponent<Rigidbody2D>();
+            _body.linearVelocity = Vector2.zero;
+            _body.angularVelocity = 0f;
+            foreach (TrailRenderer trail in GetComponentsInChildren<TrailRenderer>(true)) trail.Clear();
+        }
+
+        public void OnReturnedToPool()
+        {
+        }
+
+        private void Remove() => ObjectPool.Release(gameObject);
 
         private void FixedUpdate()
         {
@@ -63,17 +85,24 @@ namespace Tanks2D
 
         private void Update()
         {
+            _age += Time.deltaTime;
+            if (_age >= _lifetime)
+            {
+                Remove();
+                return;
+            }
+
             PlayField field = PlayField.Instance;
             if (field == null) return;
 
             float y = transform.position.y;
-            if (y > field.Top + 2f || y < field.Bottom - 2f) Destroy(gameObject);
+            if (y > field.Top + 2f || y < field.Bottom - 2f) Remove();
         }
 
         private void OnCollisionEnter2D(Collision2D collision)
         {
             _bounces++;
-            if (_bounces > _maxBounces) Destroy(gameObject);
+            if (_bounces > _maxBounces) Remove();
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -96,7 +125,7 @@ namespace Tanks2D
             }
 
             _hasHit = true;
-            Destroy(gameObject);
+            Remove();
         }
 
         // Взрывные пули: часть урона всем врагам в радиусе вокруг цели
@@ -112,6 +141,7 @@ namespace Tanks2D
             }
 
             ExplosionFlash.Spawn(center, radius);
+            GameFeel.Shake(GameFeel.ShakeExplosion);
         }
     }
 }

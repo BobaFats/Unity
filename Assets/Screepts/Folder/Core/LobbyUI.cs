@@ -11,6 +11,10 @@ namespace Tanks2D
         private void Start()
         {
             GamePause.Clear();
+
+            // Вернулись из брошенного боя — отменяем полученное в нём; затем сохраняемся
+            SaveSystem.RevertUnfinishedBattle();
+            SaveSystem.SaveRun("Lobby");
         }
 
         private void Update()

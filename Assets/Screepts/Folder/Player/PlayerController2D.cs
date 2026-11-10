@@ -372,7 +372,7 @@ namespace Tanks2D
 
         public static void SpawnBullet(GameObject prefab, Vector3 position, Quaternion rotation, float speed, int damage)
         {
-            GameObject bullet = Instantiate(prefab, position, rotation);
+            GameObject bullet = ObjectPool.Spawn(prefab, position, rotation);
 
             BulletMovement2D bulletScript = bullet.GetComponent<BulletMovement2D>();
             if (bulletScript == null) bulletScript = bullet.AddComponent<BulletMovement2D>();
